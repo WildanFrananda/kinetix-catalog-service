@@ -25,9 +25,6 @@ DEBUG = os.environ.get("DEBUG", "True").lower() in ("true", "1", "yes")
 raw_hosts = os.environ.get("ALLOWED_HOSTS", "*")
 ALLOWED_HOSTS: list[str] = [h.strip() for h in raw_hosts.split(",") if h.strip()]
 
-
-
-
 # Application definition
 
 INSTALLED_APPS = [
@@ -73,12 +70,11 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-
 import os
 
 from typing import Any
 
-USE_POSTGRES = os.environ.get("USE_POSTGRES", "false").lower() in ("true", "1", "yes")
+USE_POSTGRES = os.environ.get("USE_POSTGRES", "true").lower() in ("true", "1", "yes")
 
 if USE_POSTGRES:
     DATABASES: dict[str, dict[str, Any]] = {
@@ -98,9 +94,6 @@ else:
             'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
-
-
-
 
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
