@@ -80,7 +80,8 @@ if USE_POSTGRES:
     DATABASES: dict[str, dict[str, Any]] = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.environ.get('POSTGRES_DB', 'storefront_dev'),
+            'NAME': os.environ.get('POSTGRES_DB', 'kinetix_catalog_dev'),
+
             'USER': os.environ.get('POSTGRES_USER', 'postgres'),
             'PASSWORD': os.environ.get('POSTGRES_PASSWORD', 'postgres'),
             'HOST': os.environ.get('POSTGRES_HOST', 'localhost'),

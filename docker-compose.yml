@@ -3,10 +3,10 @@ version: '3.8'
 services:
   db:
     image: postgres:16-alpine
-    container_name: storefront_db
+    container_name: kinetix_catalog_db
     restart: always
     environment:
-      POSTGRES_DB: storefront_dev
+      POSTGRES_DB: kinetix_catalog_dev
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgrespassword
     ports:
@@ -14,14 +14,14 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d storefront_dev"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d kinetix_catalog_dev"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   web:
     build: .
-    container_name: storefront_web
+    container_name: kinetix_catalog_web
     restart: always
     command: >
       sh -c "python manage.py makemigrations &&
@@ -33,7 +33,7 @@ services:
       - "8000:8000"
     environment:
       - USE_POSTGRES=true
-      - POSTGRES_DB=storefront_dev
+      - POSTGRES_DB=kinetix_catalog_dev
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgrespassword
       - POSTGRES_HOST=db
