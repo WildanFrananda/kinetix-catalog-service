@@ -11,6 +11,8 @@ class DjangoOrderRepository(OrderRepository):
             if order.id:
                 orm_order = OrderModel.objects.get(id=order.id)
                 orm_order.status = order.status
+                if order.idempotency_key:
+                    orm_order.idempotency_key = order.idempotency_key
                 orm_order.save()
             else:
                 orm_order = OrderModel.objects.create(
@@ -23,7 +25,8 @@ class DjangoOrderRepository(OrderRepository):
                     postal_code=order.shipping_address.postal_code,
                     total_amount=order.total_amount.amount,
                     currency=order.total_amount.currency,
-                    status=order.status
+                    status=order.status,
+                    idempotency_key=order.idempotency_key
                 )
 
                 for item in order.items:
@@ -48,6 +51,15 @@ class DjangoOrderRepository(OrderRepository):
     def find_by_order_number(self, order_number: str) -> Optional[Order]:
         try:
             orm_order = OrderModel.objects.prefetch_related("items").get(order_number=order_number)
+            return self._to_domain_entity(orm_order)
+        except OrderModel.DoesNotExist:
+            return None
+
+    def find_by_idempotency_key(self, idempotency_key: str) -> Optional[Order]:
+        if not idempotency_key:
+            return None
+        try:
+            orm_order = OrderModel.objects.prefetch_related("items").get(idempotency_key=idempotency_key)
             return self._to_domain_entity(orm_order)
         except OrderModel.DoesNotExist:
             return None
@@ -85,5 +97,6 @@ class DjangoOrderRepository(OrderRepository):
             total_amount=Money(currency=orm_order.currency, amount=Decimal(str(orm_order.total_amount))),
             items=items,
             status=orm_order.status,
+            idempotency_key=orm_order.idempotency_key,
             created_at=orm_order.created_at
         )

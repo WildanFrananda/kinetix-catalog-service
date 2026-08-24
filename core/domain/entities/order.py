@@ -15,4 +15,5 @@ class Order:
     total_amount: Money
     items: List[OrderItem]
     status: str
+    idempotency_key: Optional[str] = None
     created_at: Optional[datetime] = None

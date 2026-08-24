@@ -23,18 +23,27 @@ class CheckoutView(APIView):
             for it in data["items"]
         ]
 
+        idempotency_key = (
+            request.headers.get("X-Idempotency-Key")
+            or request.headers.get("Idempotency-Key")
+            or data.get("idempotency_key", "")
+        )
+
         dto = CreateOrderInputDTO(
-            merchant_api_key=data.get("merchant_api_key", "GRPC_TEST_KEY_123"),
+            merchant_api_key=data.get("merchant_api_key", ""),
             buyer_name=data["buyer_name"],
             buyer_phone=data["buyer_phone"],
             street_address=data["street_address"],
             city=data["city"],
             postal_code=data["postal_code"],
-            items=item_dtos
+            items=item_dtos,
+            idempotency_key=idempotency_key or None
         )
 
         service = get_order_service()
         result = service.checkout(dto)
+
+        resp_status = status.HTTP_201_CREATED if result.success else status.HTTP_400_BAD_REQUEST
 
         return Response({
             "success": result.success,
@@ -44,4 +53,4 @@ class CheckoutView(APIView):
             "total_amount": str(result.total_amount),
             "fulfillment_ref": result.fulfillment_ref,
             "message": result.message
-        }, status=status.HTTP_201_CREATED)
+        }, status=resp_status)

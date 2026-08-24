@@ -19,6 +19,7 @@ class OrderModel(models.Model):
     total_amount = models.DecimalField(max_digits=12, decimal_places=2)
     currency = models.CharField(max_length=8, default="IDR")
     status = models.CharField(max_length=32, default="pending", db_index=True)
+    idempotency_key = models.CharField(max_length=128, unique=True, null=True, blank=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

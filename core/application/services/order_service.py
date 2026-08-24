@@ -24,6 +24,25 @@ class OrderService:
         if not dto.items:
             raise ValueError("Order must contain at least one item")
 
+        if dto.idempotency_key:
+            existing_order = self._order_repo.find_by_idempotency_key(dto.idempotency_key)
+            if existing_order:
+                return CheckoutResultDTO(
+                    success=True,
+                    order_id=existing_order.id,
+                    order_number=existing_order.order_number,
+                    status=existing_order.status,
+                    total_amount=existing_order.total_amount.amount,
+                    fulfillment_ref=str(existing_order.id or ""),
+                    message="Duplicate request detected. Returning existing order details."
+                )
+
+        if self._bin_stock_port:
+            for it in dto.items:
+                res = self._bin_stock_port.reserve_stock(sku=it.sku, quantity=it.quantity)
+                if not res.get("success", False) and not res.get("unavailable", False):
+                    raise ValueError(f"Insufficient stock for SKU '{it.sku}'. Reservation failed.")
+
         shipping_addr = Address(
             recipient_name=dto.buyer_name,
             phone_number=dto.buyer_phone,
@@ -59,28 +78,61 @@ class OrderService:
             shipping_address=shipping_addr,
             total_amount=Money(currency="IDR", amount=total_amount),
             items=domain_items,
-            status="pending"
+            status="pending",
+            idempotency_key=dto.idempotency_key
         )
 
         saved_order = self._order_repo.save(new_order)
 
-        grpc_res = self._fulfillment_port.submit_fulfillment_order(
-            order=saved_order,
-            merchant_api_key=dto.merchant_api_key
-        )
+        try:
+            grpc_res = self._fulfillment_port.submit_fulfillment_order(
+                order=saved_order,
+                merchant_api_key=dto.merchant_api_key
+            )
 
-        fulfillment_status = grpc_res.get("status", "received")
-        fulfillment_ref = str(grpc_res.get("order_id", saved_order.id))
+            is_offline = bool(grpc_res.get("offline", False))
+            is_success = bool(grpc_res.get("success", True))
 
-        return CheckoutResultDTO(
-            success=True,
-            order_id=saved_order.id,
-            order_number=saved_order.order_number,
-            status=fulfillment_status,
-            total_amount=total_amount,
-            fulfillment_ref=fulfillment_ref,
-            message="Checkout completed and dispatched to Warehouse OMS"
-        )
+            if not is_success and not is_offline:
+                raise RuntimeError(str(grpc_res.get("error", "Fulfillment service rejected order")))
+
+            fulfillment_status = grpc_res.get("status", "received" if is_offline else "pending")
+            fulfillment_ref = str(grpc_res.get("order_id", saved_order.id))
+
+            return CheckoutResultDTO(
+                success=True,
+                order_id=saved_order.id,
+                order_number=saved_order.order_number,
+                status=fulfillment_status,
+                total_amount=total_amount,
+                fulfillment_ref=fulfillment_ref,
+                message="Checkout completed and dispatched to Warehouse OMS" if not is_offline else "Order created and queued for offline fulfillment"
+            )
+
+        except Exception as exc:
+            failed_order = Order(
+                id=saved_order.id,
+                order_number=saved_order.order_number,
+                buyer_name=saved_order.buyer_name,
+                buyer_phone=saved_order.buyer_phone,
+                shipping_address=saved_order.shipping_address,
+                total_amount=saved_order.total_amount,
+                items=saved_order.items,
+                status="failed",
+                idempotency_key=saved_order.idempotency_key,
+                created_at=saved_order.created_at
+            )
+            self._order_repo.save(failed_order)
+
+            return CheckoutResultDTO(
+                success=False,
+                order_id=saved_order.id,
+                order_number=saved_order.order_number,
+                status="failed",
+                total_amount=total_amount,
+                fulfillment_ref="",
+                message=f"Fulfillment submission failed: {exc}"
+            )
 
     def reserve_cart_stock(self, dto: ReserveCartStockInputDTO) -> ReservationResult:
         if dto.quantity <= 0:

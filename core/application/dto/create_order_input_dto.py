@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 from core.application.dto.order_item_dto import OrderItemDTO
 
 @dataclass(frozen=True)
@@ -11,3 +11,4 @@ class CreateOrderInputDTO:
     city: str
     postal_code: str
     items: List[OrderItemDTO]
+    idempotency_key: Optional[str] = None

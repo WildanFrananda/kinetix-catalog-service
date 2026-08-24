@@ -20,8 +20,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Load environment variables from .env file
 load_dotenv(BASE_DIR / ".env")
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "django-insecure-default-dev-key")
 DEBUG = os.environ.get("DEBUG", "True").lower() in ("true", "1", "yes")
+
+SECRET_KEY = os.environ.get("SECRET_KEY")
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = "django-insecure-dev-key-for-local-testing-only"
+    else:
+        raise ValueError("CRITICAL SECURITY ERROR: SECRET_KEY environment variable is required in production!")
+
 raw_hosts = os.environ.get("ALLOWED_HOSTS", "*")
 ALLOWED_HOSTS: list[str] = [h.strip() for h in raw_hosts.split(",") if h.strip()]
 
@@ -37,9 +44,6 @@ INSTALLED_APPS = [
     'rest_framework',
     'core.apps.CoreConfig',
 ]
-
-
-
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -70,34 +74,29 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-import os
-
-from typing import Any
-
-USE_POSTGRES = os.environ.get("USE_POSTGRES", "true").lower() in ("true", "1", "yes")
+# Database
+USE_POSTGRES = os.environ.get("USE_POSTGRES", "false").lower() in ("true", "1", "yes")
 
 if USE_POSTGRES:
-    DATABASES: dict[str, dict[str, Any]] = {
+    DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.environ.get('POSTGRES_DB', 'kinetix_catalog_dev'),
-
-            'USER': os.environ.get('POSTGRES_USER', 'postgres'),
-            'PASSWORD': os.environ.get('POSTGRES_PASSWORD', 'postgres'),
-            'HOST': os.environ.get('POSTGRES_HOST', 'localhost'),
-            'PORT': os.environ.get('POSTGRES_PORT', '5432'),
+            'NAME': os.environ.get("DB_NAME", "kinetix_catalog_dev"),
+            'USER': os.environ.get("DB_USER", "postgres"),
+            'PASSWORD': os.environ.get("DB_PASSWORD", "postgrespassword"),
+            'HOST': os.environ.get("DB_HOST", "localhost"),
+            'PORT': os.environ.get("DB_PORT", "5432"),
         }
     }
 else:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
+            'NAME': str(BASE_DIR / 'db.sqlite3'),
         }
     }
 
 # Password validation
-# https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -114,9 +113,7 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
 # Internationalization
-# https://docs.djangoproject.com/en/6.0/topics/i18n/
 
 LANGUAGE_CODE = 'en-us'
 
@@ -126,8 +123,11 @@ USE_I18N = True
 
 USE_TZ = True
 
-
 # Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+WAREHOUSE_GRPC_HOST = os.environ.get("WAREHOUSE_GRPC_HOST", "localhost")
+WAREHOUSE_GRPC_PORT = int(os.environ.get("WAREHOUSE_GRPC_PORT", "50051"))

@@ -57,11 +57,13 @@ class BinStockGrpcClient(BinStockServicePort):
             return {
                 "success": res.success,
                 "reserved_quantity": res.reserved_quantity,
-                "message": res.message
+                "message": res.message,
+                "unavailable": False
             }
         except Exception as e:
             return {
                 "success": False,
                 "reserved_quantity": 0,
-                "message": f"gRPC BinStockService Unavailable: {str(e)}"
+                "message": f"gRPC BinStockService Unavailable: {str(e)}",
+                "unavailable": True
             }

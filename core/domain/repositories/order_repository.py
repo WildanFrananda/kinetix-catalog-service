@@ -16,5 +16,9 @@ class OrderRepository(ABC):
         pass
 
     @abstractmethod
+    def find_by_idempotency_key(self, idempotency_key: str) -> Optional[Order]:
+        pass
+
+    @abstractmethod
     def list_all(self) -> List[Order]:
         pass

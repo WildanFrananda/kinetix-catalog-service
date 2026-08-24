@@ -68,20 +68,23 @@ class FulfillmentGrpcClient(FulfillmentServicePort):
                 return {
                     "success": False,
                     "order_id": 0,
-                    "message": f"gRPC Error [{res.error.error_code}]: {res.error.message}"
+                    "message": f"gRPC Error [{res.error.error_code}]: {res.error.message}",
+                    "offline": False
                 }
 
             return {
                 "success": True,
                 "order_id": res.order_id,
                 "order_number": res.order_number,
-                "status": res.status
+                "status": res.status,
+                "offline": False
             }
         except Exception as e:
             return {
                 "success": False,
                 "order_id": 0,
-                "message": f"Fulfillment Service gRPC Exception: {str(e)}"
+                "message": f"Fulfillment Service gRPC Exception: {str(e)}",
+                "offline": True
             }
 
     def get_fulfillment_status(self, order_id: int, merchant_api_key: str) -> Dict[str, Any]:

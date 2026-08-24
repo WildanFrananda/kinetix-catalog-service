@@ -21,6 +21,7 @@ class FakeOrderRepository(OrderRepository):
             total_amount=order.total_amount,
             items=order.items,
             status=order.status,
+            idempotency_key=order.idempotency_key,
             created_at=order.created_at
         )
         self._store[order_id] = saved_order
@@ -32,6 +33,14 @@ class FakeOrderRepository(OrderRepository):
     def find_by_order_number(self, order_number: str) -> Optional[Order]:
         for o in self._store.values():
             if o.order_number == order_number:
+                return o
+        return None
+
+    def find_by_idempotency_key(self, idempotency_key: str) -> Optional[Order]:
+        if not idempotency_key:
+            return None
+        for o in self._store.values():
+            if o.idempotency_key == idempotency_key:
                 return o
         return None
 
