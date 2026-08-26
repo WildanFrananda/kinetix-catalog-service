@@ -30,7 +30,6 @@ class CheckoutView(APIView):
         )
 
         dto = CreateOrderInputDTO(
-            merchant_api_key=data.get("merchant_api_key", ""),
             buyer_name=data["buyer_name"],
             buyer_phone=data["buyer_phone"],
             street_address=data["street_address"],

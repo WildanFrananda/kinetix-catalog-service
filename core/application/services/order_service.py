@@ -126,8 +126,7 @@ class OrderService:
 
         try:
             grpc_res = self._fulfillment_port.submit_fulfillment_order(
-                order=saved_order,
-                merchant_api_key=dto.merchant_api_key
+                order=saved_order
             )
 
             is_offline = bool(grpc_res.get("offline", False))

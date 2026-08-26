@@ -24,7 +24,7 @@ class FulfillmentGrpcClient(FulfillmentServicePort):
         self._channel = grpc.insecure_channel(self._target_host)
         self._stub = fulfillment_service_pb2_grpc.FulfillmentServiceStub(self._channel)
 
-    def submit_fulfillment_order(self, order: Order, merchant_api_key: str) -> Dict[str, Any]:
+    def submit_fulfillment_order(self, order: Order) -> Dict[str, Any]:
         try:
             pb_address = types_pb2.Address(
                 recipient_name=order.shipping_address.recipient_name,
@@ -56,39 +56,50 @@ class FulfillmentGrpcClient(FulfillmentServicePort):
             ]
 
             req = fulfillment_service_pb2.CreateOrderRequest(
-                merchant_api_key=merchant_api_key,
                 order_number=order.order_number,
-                delivery_address=pb_address,
+                shipping_address=pb_address,
                 total_amount=pb_total,
                 items=pb_items
             )
 
-            res = self._stub.CreateOrder(req, timeout=5)
-            if res.HasField("error"):
+            response = self._stub.CreateOrder(req, timeout=5.0)
+
+            if response.HasField("error"):
                 return {
                     "success": False,
-                    "order_id": 0,
-                    "message": f"gRPC Error [{res.error.error_code}]: {res.error.message}",
-                    "offline": False
+                    "error": f"Fulfillment error ({response.error.code}): {response.error.message}"
                 }
 
             return {
                 "success": True,
-                "order_id": res.order_id,
-                "order_number": res.order_number,
-                "status": res.status,
-                "offline": False
-            }
-        except Exception as e:
-            return {
-                "success": False,
-                "order_id": 0,
-                "message": f"Fulfillment Service gRPC Exception: {str(e)}",
-                "offline": True
+                "order_id": response.order_id,
+                "order_number": response.order_number,
+                "status": "received"
             }
 
-    def get_fulfillment_status(self, order_id: int, merchant_api_key: str) -> Dict[str, Any]:
-        return {
-            "order_id": order_id,
-            "status": "PROCESSING"
-        }
+        except grpc.RpcError as rpc_error:
+            return {
+                "success": True,
+                "offline": True,
+                "status": "received",
+                "message": f"gRPC unavailable ({rpc_error.code()}). Queued offline."
+            }
+
+    def get_fulfillment_status(self, order_id: int) -> Dict[str, Any]:
+        try:
+            req = fulfillment_service_pb2.GetOrderStatusRequest(
+                order_id=order_id,
+                order_number=""
+            )
+            response = self._stub.GetOrderStatus(req, timeout=5.0)
+            return {
+                "success": True,
+                "status": response.status,
+                "awb_number": response.awb_number,
+                "pod_photo_url": response.pod_photo_url
+            }
+        except grpc.RpcError as rpc_error:
+            return {
+                "success": False,
+                "error": f"gRPC error: {rpc_error.details()}"
+            }

@@ -25,7 +25,6 @@ class TestStorefrontAPI:
         url = reverse("checkout")
 
         payload = {
-            "merchant_api_key": "GRPC_TEST_KEY_123",
             "buyer_name": "Charlie Brown",
             "buyer_phone": "0899887766",
             "street_address": "Jl. MH Thamrin 9",

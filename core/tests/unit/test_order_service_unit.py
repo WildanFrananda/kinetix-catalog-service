@@ -9,7 +9,7 @@ from core.tests.unit.fake_bin_stock_service_port import FakeBinStockServicePort
 from core.tests.unit.fake_pricing_service_port import FakePricingServicePort
 
 class FailingFulfillmentServicePort(FakeFulfillmentServicePort):
-    def submit_fulfillment_order(self, order: object, merchant_api_key: str) -> Dict[str, Any]:
+    def submit_fulfillment_order(self, order: object) -> Dict[str, Any]:
         return {"success": False, "error": "Warehouse server connection reset"}
 
 class TestOrderServiceUnit:
@@ -19,7 +19,6 @@ class TestOrderServiceUnit:
         service = OrderService(order_repo=repo, fulfillment_port=port)
 
         dto = CreateOrderInputDTO(
-            merchant_api_key="TEST_KEY",
             buyer_name="Alice Smith",
             buyer_phone="0811223344",
             street_address="123 Main Street",
@@ -42,7 +41,6 @@ class TestOrderServiceUnit:
         service = OrderService(order_repo=repo, fulfillment_port=port)
 
         dto = CreateOrderInputDTO(
-            merchant_api_key="TEST_KEY",
             buyer_name="Alice Smith",
             buyer_phone="0811223344",
             street_address="123 Main Street",
@@ -74,7 +72,6 @@ class TestOrderServiceUnit:
         service = OrderService(order_repo=repo, fulfillment_port=fulfillment_port, bin_stock_port=FailingBinStockPort())
 
         dto = CreateOrderInputDTO(
-            merchant_api_key="TEST_KEY",
             buyer_name="Bob Jones",
             buyer_phone="0811223355",
             street_address="456 Market St",
@@ -94,7 +91,6 @@ class TestOrderServiceUnit:
         service = OrderService(order_repo=repo, fulfillment_port=port)
 
         dto = CreateOrderInputDTO(
-            merchant_api_key="TEST_KEY",
             buyer_name="Charlie Brown",
             buyer_phone="0811223366",
             street_address="789 Park Ave",
@@ -123,7 +119,6 @@ class TestOrderServiceUnit:
         service = OrderService(order_repo=repo, fulfillment_port=fulfillment_port, pricing_port=pricing_port)
 
         dto = CreateOrderInputDTO(
-            merchant_api_key="TEST_KEY",
             buyer_name="David Warner",
             buyer_phone="0811223377",
             street_address="321 Stadium Rd",
@@ -138,7 +133,6 @@ class TestOrderServiceUnit:
         result = service.checkout(dto)
 
         assert result.success is True
-        # Base: 100,000 * 2 = 200,000. 20% discount = 160,000. Voucher SUPER50K = -50,000 => Final: 110,000
         assert result.total_amount == Decimal("110000.00")
 
     def test_reserve_cart_stock_reserves_via_bin_stock_port(self) -> None:
