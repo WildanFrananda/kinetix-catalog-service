@@ -2,19 +2,27 @@ import uuid
 from decimal import Decimal
 from typing import Optional, List
 from core.domain.entities import Order, OrderItem, Money, Address, ReservationResult
-from core.domain.repositories import OrderRepository, FulfillmentServicePort, BinStockServicePort
+from core.domain.repositories import (
+    OrderRepository,
+    FulfillmentServicePort,
+    BinStockServicePort,
+    PricingServicePort,
+)
 from core.application.dto import CreateOrderInputDTO, CheckoutResultDTO, ReserveCartStockInputDTO
+
 
 class OrderService:
     def __init__(
         self,
         order_repo: OrderRepository,
         fulfillment_port: FulfillmentServicePort,
-        bin_stock_port: Optional[BinStockServicePort] = None
+        bin_stock_port: Optional[BinStockServicePort] = None,
+        pricing_port: Optional[PricingServicePort] = None,
     ) -> None:
         self._order_repo = order_repo
         self._fulfillment_port = fulfillment_port
         self._bin_stock_port = bin_stock_port
+        self._pricing_port = pricing_port
 
     def checkout(self, dto: CreateOrderInputDTO) -> CheckoutResultDTO:
         if not dto.buyer_name.strip():
@@ -54,19 +62,51 @@ class OrderService:
         domain_items: List[OrderItem] = []
         total_amount = Decimal("0")
 
-        for it in dto.items:
-            item_price = Money(currency="IDR", amount=it.price)
-            item_total = it.price * Decimal(it.quantity)
-            total_amount += item_total
-
-            domain_items.append(
-                OrderItem(
-                    sku=it.sku,
-                    product_name=it.product_name,
-                    quantity=it.quantity,
-                    price=item_price
-                )
+        # Delegate pricing calculation entirely to PricingServicePort (kinetix-pricing-service)
+        if self._pricing_port:
+            pricing_payload_items = [
+                {
+                    "product_id": it.sku,
+                    "base_price": str(it.price),
+                    "quantity": it.quantity,
+                }
+                for it in dto.items
+            ]
+            pricing_res = self._pricing_port.calculate_price(
+                items=pricing_payload_items,
+                voucher_code=dto.voucher_code
             )
+
+            total_amount = Decimal(str(pricing_res.get("final_total", "0")))
+            pricing_items_map = {
+                str(item_res.get("product_id")): Decimal(str(item_res.get("final_unit_price", "0")))
+                for item_res in pricing_res.get("items", [])
+            }
+
+            for it in dto.items:
+                final_unit_price = pricing_items_map.get(it.sku, it.price)
+                domain_items.append(
+                    OrderItem(
+                        sku=it.sku,
+                        product_name=it.product_name,
+                        quantity=it.quantity,
+                        price=Money(currency="IDR", amount=final_unit_price)
+                    )
+                )
+        else:
+            for it in dto.items:
+                item_price = Money(currency="IDR", amount=it.price)
+                item_total = it.price * Decimal(it.quantity)
+                total_amount += item_total
+
+                domain_items.append(
+                    OrderItem(
+                        sku=it.sku,
+                        product_name=it.product_name,
+                        quantity=it.quantity,
+                        price=item_price
+                    )
+                )
 
         order_num = f"ORD-STF-{uuid.uuid4().hex[:8].upper()}"
 
@@ -148,5 +188,5 @@ class OrderService:
             quantity=dto.quantity,
             success=success,
             bin_location=str(res.get("bin_location", "N/A")),
-            message="Stock successfully reserved for 15 minutes" if success else "Failed to reserve stock"
+            message=str(res.get("message", "Stock reserved successfully"))
         )

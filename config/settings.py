@@ -75,26 +75,16 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 
 # Database
-USE_POSTGRES = os.environ.get("USE_POSTGRES", "false").lower() in ("true", "1", "yes")
-
-if USE_POSTGRES:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.environ.get("DB_NAME", "kinetix_catalog_dev"),
-            'USER': os.environ.get("DB_USER", "postgres"),
-            'PASSWORD': os.environ.get("DB_PASSWORD", "postgrespassword"),
-            'HOST': os.environ.get("DB_HOST", "localhost"),
-            'PORT': os.environ.get("DB_PORT", "5432"),
-        }
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.environ.get("DB_NAME", "kinetix_catalog_dev"),
+        'USER': os.environ.get("DB_USER", "postgres"),
+        'PASSWORD': os.environ.get("DB_PASSWORD", "postgrespassword"),
+        'HOST': os.environ.get("DB_HOST", "localhost"),
+        'PORT': os.environ.get("DB_PORT", "5432"),
     }
-else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': str(BASE_DIR / 'db.sqlite3'),
-        }
-    }
+}
 
 # Password validation
 

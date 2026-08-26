@@ -6,6 +6,7 @@ from core.application.services import OrderService
 from core.tests.unit.fake_order_repository import FakeOrderRepository
 from core.tests.unit.fake_fulfillment_service_port import FakeFulfillmentServicePort
 from core.tests.unit.fake_bin_stock_service_port import FakeBinStockServicePort
+from core.tests.unit.fake_pricing_service_port import FakePricingServicePort
 
 class FailingFulfillmentServicePort(FakeFulfillmentServicePort):
     def submit_fulfillment_order(self, order: object, merchant_api_key: str) -> Dict[str, Any]:
@@ -114,6 +115,31 @@ class TestOrderServiceUnit:
         saved_order = repo.find_by_id(result.order_id)
         assert saved_order is not None
         assert saved_order.status == "failed"
+
+    def test_checkout_delegates_pricing_calculation_to_pricing_service_port(self) -> None:
+        repo = FakeOrderRepository()
+        fulfillment_port = FakeFulfillmentServicePort()
+        pricing_port = FakePricingServicePort(discount_rate=Decimal("0.20"))
+        service = OrderService(order_repo=repo, fulfillment_port=fulfillment_port, pricing_port=pricing_port)
+
+        dto = CreateOrderInputDTO(
+            merchant_api_key="TEST_KEY",
+            buyer_name="David Warner",
+            buyer_phone="0811223377",
+            street_address="321 Stadium Rd",
+            city="Jakarta",
+            postal_code="10220",
+            items=[
+                OrderItemDTO(sku="TSHIRT-BLK-M", product_name="Black Tee M", quantity=2, price=Decimal("100000.00"))
+            ],
+            voucher_code="SUPER50K"
+        )
+
+        result = service.checkout(dto)
+
+        assert result.success is True
+        # Base: 100,000 * 2 = 200,000. 20% discount = 160,000. Voucher SUPER50K = -50,000 => Final: 110,000
+        assert result.total_amount == Decimal("110000.00")
 
     def test_reserve_cart_stock_reserves_via_bin_stock_port(self) -> None:
         repo = FakeOrderRepository()

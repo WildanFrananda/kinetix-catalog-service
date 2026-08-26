@@ -26,7 +26,6 @@ class ProductService:
         end_idx = start_idx + filter_dto.page_size
         paginated_products = products[start_idx:end_idx]
 
-        # Solve N+1 gRPC query bottleneck via parallel thread pool execution
         stock_map: Dict[str, StockInfo] = {}
         if paginated_products:
             with ThreadPoolExecutor(max_workers=min(len(paginated_products), 10)) as executor:

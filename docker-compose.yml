@@ -32,7 +32,6 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - USE_POSTGRES=true
       - POSTGRES_DB=kinetix_catalog_dev
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgrespassword

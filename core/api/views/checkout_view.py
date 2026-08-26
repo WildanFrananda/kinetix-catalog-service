@@ -37,7 +37,8 @@ class CheckoutView(APIView):
             city=data["city"],
             postal_code=data["postal_code"],
             items=item_dtos,
-            idempotency_key=idempotency_key or None
+            idempotency_key=idempotency_key or None,
+            voucher_code=data.get("voucher_code")
         )
 
         service = get_order_service()

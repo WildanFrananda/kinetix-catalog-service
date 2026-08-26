@@ -172,6 +172,6 @@ storefront/
 ## 🔺 6. Test Pyramid & Quality Requirements
 
 1. **Unit Tests**: Test `ListProductsService`, `GetProductDetailService`, `ReserveCartStockService` using fake in-memory repositories & fake gRPC ports.
-2. **Integration Tests**: Test `DjangoProductRepository` against real PostgreSQL / SQLite.
+2. **Integration Tests**: Test `DjangoProductRepository` against real PostgreSQL.
 3. **API Tests**: Test `ProductListView`, `ProductDetailView`, `ReserveStockView` HTTP endpoints.
 4. **Strict Typing**: Run `mypy orders products cart` to ensure `Success: no issues found`.

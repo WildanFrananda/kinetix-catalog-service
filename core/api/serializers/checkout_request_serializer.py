@@ -15,3 +15,4 @@ class CheckoutRequestSerializer(serializers.Serializer[Dict[str, Any]]):
     city = serializers.CharField(max_length=64)
     postal_code = serializers.CharField(max_length=16)
     items = OrderItemSerializer(many=True)
+    voucher_code = serializers.CharField(max_length=64, required=False, allow_null=True, allow_blank=True, default=None)

@@ -59,5 +59,5 @@ kinetix-catalog-service/
 venv/bin/mypy core
 
 # 2. Run PyTest Test Suite (12/12 Passed)
-USE_POSTGRES=false venv/bin/pytest -v
+venv/bin/pytest -v
 ```

@@ -12,3 +12,4 @@ class CreateOrderInputDTO:
     postal_code: str
     items: List[OrderItemDTO]
     idempotency_key: Optional[str] = None
+    voucher_code: Optional[str] = None
