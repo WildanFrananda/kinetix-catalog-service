@@ -15,5 +15,7 @@ class Product:
     currency: str
     image_url: str
     category: Category
+    merchant_id: Optional[int] = None
+    is_active: bool = True
     stock_info: Optional[StockInfo] = None
     created_at: Optional[datetime] = None

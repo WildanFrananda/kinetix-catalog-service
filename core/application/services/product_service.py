@@ -1,7 +1,9 @@
-from typing import List, Dict
+from typing import List, Dict, Optional, Any
 from concurrent.futures import ThreadPoolExecutor
+from decimal import Decimal
 from core.domain.repositories import ProductRepository, BinStockServicePort
-from core.domain.entities import StockInfo
+from core.domain.repositories.identity_service_port import IdentityServicePort
+from core.domain.entities import Product, Category, StockInfo
 from core.application.dto import (
     ProductFilterDTO,
     ProductListResultDTO,
@@ -11,9 +13,15 @@ from core.application.dto import (
 )
 
 class ProductService:
-    def __init__(self, product_repo: ProductRepository, bin_stock_port: BinStockServicePort) -> None:
+    def __init__(
+        self,
+        product_repo: ProductRepository,
+        bin_stock_port: BinStockServicePort,
+        identity_port: Optional[IdentityServicePort] = None
+    ) -> None:
         self._product_repo = product_repo
         self._bin_stock_port = bin_stock_port
+        self._identity_port = identity_port
 
     def list_products(self, filter_dto: ProductFilterDTO) -> ProductListResultDTO:
         products = self._product_repo.find_all(
@@ -65,27 +73,105 @@ class ProductService:
             results=summaries
         )
 
-    def get_product_detail(self, sku: str) -> ProductDetailDTO:
-        product = self._product_repo.find_by_sku(sku)
-        if not product:
-            raise ValueError(f"Product with SKU '{sku}' not found")
+    def get_product_detail(self, sku: str) -> Optional[ProductDetailDTO]:
+        p = self._product_repo.find_by_sku(sku)
+        if not p:
+            return None
 
-        stock = self._bin_stock_port.get_bin_stock_info(sku)
-        product_id = product.id or 0
+        try:
+            stock = self._bin_stock_port.get_bin_stock_info(sku)
+        except Exception:
+            stock = StockInfo(sku=sku, bin_location="Unavailable", available_quantity=0, reserved_quantity=0)
 
+        warehouse = WarehouseStockDTO(
+            sku=p.sku,
+            bin_location=stock.bin_location,
+            available_quantity=stock.available_quantity,
+            reserved_quantity=stock.reserved_quantity
+        )
+
+        product_id = p.id or 0
         return ProductDetailDTO(
             id=product_id,
-            sku=product.sku,
-            title=product.title,
-            description=product.description,
-            category=product.category.name,
-            price=product.price,
-            currency=product.currency,
-            image_url=product.image_url,
-            warehouse_stock=WarehouseStockDTO(
-                sku=stock.sku,
-                bin_location=stock.bin_location,
-                available_quantity=stock.available_quantity,
-                reserved_quantity=stock.reserved_quantity
-            )
+            sku=p.sku,
+            title=p.title,
+            description=p.description,
+            category=p.category.name,
+            price=p.price,
+            currency=p.currency,
+            image_url=p.image_url,
+            warehouse_stock=warehouse
         )
+
+    def create_product(self, merchant_id: int, data: Dict[str, Any]) -> Product:
+        if self._identity_port:
+            info = self._identity_port.get_merchant_info(merchant_id)
+            if not info or info.get("status") not in ["verified", "active"]:
+                raise PermissionError("Merchant account is not verified/active")
+
+        cat = self._product_repo.find_category_by_id(int(data["category_id"]))
+        if not cat:
+            raise ValueError(f"Category {data['category_id']} not found")
+
+        product = Product(
+            id=None,
+            sku=str(data["sku"]),
+            title=str(data["title"]),
+            description=str(data.get("description", "")),
+            price=Decimal(str(data["price"])),
+            currency=str(data.get("currency", "IDR")),
+            image_url=str(data.get("image_url", "")),
+            category=cat,
+            merchant_id=merchant_id,
+            is_active=True
+        )
+        return self._product_repo.save(product)
+
+    def update_product(self, product_id: int, merchant_id: int, data: Dict[str, Any]) -> Optional[Product]:
+        if self._identity_port:
+            info = self._identity_port.get_merchant_info(merchant_id)
+            if not info or info.get("status") not in ["verified", "active"]:
+                raise PermissionError("Merchant account is not verified/active")
+
+        existing = self._product_repo.find_by_id(product_id)
+        if not existing:
+            return None
+
+        if existing.merchant_id is not None and existing.merchant_id != merchant_id:
+            raise PermissionError("Product does not belong to this merchant")
+
+        category = existing.category
+        if "category_id" in data:
+            cat = self._product_repo.find_category_by_id(int(data["category_id"]))
+            if not cat:
+                raise ValueError(f"Category {data['category_id']} not found")
+            category = cat
+
+        updated = Product(
+            id=existing.id,
+            sku=str(data.get("sku", existing.sku)),
+            title=str(data.get("title", existing.title)),
+            description=str(data.get("description", existing.description)),
+            price=Decimal(str(data["price"])) if "price" in data else existing.price,
+            currency=str(data.get("currency", existing.currency)),
+            image_url=str(data.get("image_url", existing.image_url)),
+            category=category,
+            merchant_id=merchant_id,
+            is_active=bool(data.get("is_active", existing.is_active))
+        )
+        return self._product_repo.save(updated)
+
+    def delete_product(self, product_id: int, merchant_id: int) -> bool:
+        if self._identity_port:
+            info = self._identity_port.get_merchant_info(merchant_id)
+            if not info or info.get("status") not in ["verified", "active"]:
+                raise PermissionError("Merchant account is not verified/active")
+
+        existing = self._product_repo.find_by_id(product_id)
+        if not existing:
+            return False
+
+        if existing.merchant_id is not None and existing.merchant_id != merchant_id:
+            raise PermissionError("Product does not belong to this merchant")
+
+        return self._product_repo.delete(product_id)

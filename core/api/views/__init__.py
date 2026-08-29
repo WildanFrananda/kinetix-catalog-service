@@ -1,4 +1,4 @@
-from core.api.views.product_list_view import ProductListView
-from core.api.views.product_detail_view import ProductDetailView
+from core.api.views.product_view import ProductView
+from core.api.views.category_view import CategoryView
 
-__all__ = ["ProductListView", "ProductDetailView"]
+__all__ = ["ProductView", "CategoryView"]
