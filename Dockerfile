@@ -16,6 +16,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+RUN useradd --system --uid 10001 --create-home --shell /usr/sbin/nologin kinetix \
+    && chown -R kinetix:kinetix /app
+USER kinetix
+
 EXPOSE 8000
 
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
