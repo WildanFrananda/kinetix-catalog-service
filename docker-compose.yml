@@ -1,3 +1,7 @@
+# Secrets are read from the environment with the ${VAR:?message} form, which makes
+# `docker compose` refuse to render at all when a value is missing rather than starting
+# on a committed default (S1 / P0-SEC-02). Datastore ports are deliberately NOT published
+# to the host: reach them from inside the compose network, or with `docker compose exec`.
 version: '3.8'
 
 services:
@@ -7,14 +11,12 @@ services:
     restart: always
     environment:
       POSTGRES_DB: kinetix_catalog_dev
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgrespassword
-    ports:
-      - "5434:5432"
+      POSTGRES_USER: ${DB_USERNAME:?DB_USERNAME is required}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d kinetix_catalog_dev"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d kinetix_catalog_dev"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -33,8 +35,8 @@ services:
       - "8000:8000"
     environment:
       - POSTGRES_DB=kinetix_catalog_dev
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgrespassword
+      - POSTGRES_USER=${DB_USERNAME:?DB_USERNAME is required}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
       - POSTGRES_HOST=db
       - POSTGRES_PORT=5432
       - OMS_GRPC_HOST=host.docker.internal:50051

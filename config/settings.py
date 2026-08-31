@@ -20,17 +20,26 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Load environment variables from .env file
 load_dotenv(BASE_DIR / ".env")
 
-DEBUG = os.environ.get("DEBUG", "True").lower() in ("true", "1", "yes")
+
+def _require_env(name: str) -> str:
+    """Read a required secret. Missing means stop, never fall back to a committed value."""
+    value = os.environ.get(name)
+    if not value:
+        raise ValueError(f"{name} is required and has no default. Set it in the environment.")
+    return value
+
+DEBUG = os.environ.get("DEBUG", "False").lower() in ("true", "1", "yes")
 
 SECRET_KEY = os.environ.get("SECRET_KEY")
 if not SECRET_KEY:
-    if DEBUG:
-        SECRET_KEY = "django-insecure-dev-key-for-local-testing-only"
-    else:
-        raise ValueError("CRITICAL SECURITY ERROR: SECRET_KEY environment variable is required in production!")
+    raise ValueError("SECRET_KEY is required and has no default. Set it in the environment.")
+if len(SECRET_KEY) < 32:
+    raise ValueError("SECRET_KEY must be at least 32 characters.")
 
-raw_hosts = os.environ.get("ALLOWED_HOSTS", "*")
+raw_hosts = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1" if DEBUG else "")
 ALLOWED_HOSTS: list[str] = [h.strip() for h in raw_hosts.split(",") if h.strip()]
+if not ALLOWED_HOSTS:
+    raise ValueError("ALLOWED_HOSTS is required when DEBUG is off. Set it to the hostnames this service serves.")
 
 # Application definition
 
@@ -80,7 +89,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.environ.get("DB_NAME", "kinetix_catalog_dev"),
         'USER': os.environ.get("DB_USER", "postgres"),
-        'PASSWORD': os.environ.get("DB_PASSWORD", "postgrespassword"),
+        'PASSWORD': _require_env("DB_PASSWORD"),
         'HOST': os.environ.get("DB_HOST", "localhost"),
         'PORT': os.environ.get("DB_PORT", "5432"),
     }
