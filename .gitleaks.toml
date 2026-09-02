@@ -1,0 +1,26 @@
+# gitleaks configuration for kinetix-catalog-service.
+#
+# gitleaks reads this from the repository root, so CI and a local `gitleaks detect` agree.
+# One exception, scoped to the thing that is not a secret.
+
+[extend]
+useDefault = true
+
+[[rules]]
+# The default generic-api-key rule fires on any high-entropy string near a key-ish word. Kept
+# as-is; the exception below is narrowed to the field rather than the rule being weakened.
+id = "generic-api-key"
+description = "Generic API key"
+regex = '''(?i)(?:key|api|token|secret|client|passwd|password|auth|access)(?:[0-9a-z\-_\t .]{0,20})(?:[\s|']|[\s|"]){0,3}(?:=|>|:{1,3}=|\|\||:|<=|=>|:=)(?:'|\"|\s|=|\x60){0,5}([0-9a-z\-_.=]{10,150})(?:['|\"|\n|\r|\s|\x60|;]|$)'''
+keywords = ["key", "api", "token", "secret", "client", "passwd", "password", "auth", "access"]
+
+  [rules.allowlist]
+  # An idempotency key is not a credential. It is a client-supplied token whose only job is to
+  # let the server recognise a retry of the same request and return the first result instead of
+  # acting twice. It grants nothing, and it is meant to be visible to the client that chose it —
+  # the rule matches it only because the word "key" sits next to a high-entropy value.
+  #
+  # The hit is in core/tests/unit/test_order_service_unit.py, a file that no longer exists in
+  # the working tree; it survives in history, which is what gitleaks scans.
+  regexes = ['''idempotency_key\s*=\s*["'][^"']+["']''']
+  regexTarget = "line"
