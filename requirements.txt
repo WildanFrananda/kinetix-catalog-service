@@ -1,5 +1,6 @@
 asgiref==3.12.1
 Django==6.1
+gunicorn==23.0.0
 djangorestframework==3.18.0
 python-dotenv==1.2.3
 sqlparse==0.6.0
@@ -7,7 +8,10 @@ grpcio==1.83.0
 grpcio-tools==1.83.0
 protobuf==7.35.1
 psycopg[binary]==3.3.4
-mypy==2.3.1
+mypy==1.18.2
 django-stubs==6.1.0
 djangorestframework-stubs==3.18.0
 types-protobuf==7.34.1.20260816
+types-grpcio==1.0.0.20250703
+pytest==8.4.2
+pytest-django==4.11.1

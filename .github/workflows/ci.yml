@@ -1,0 +1,95 @@
+name: CI
+
+# The job that matters here is `typecheck`. Catalog shipped a package whose __init__.py
+# imported four serializer modules that did not exist, so every import raised
+# ModuleNotFoundError and the container restart-looped. Two settings hid it:
+#
+#   * `ignore_missing_imports = True` made mypy answer "Success: no issues found" for an import
+#     of a module that is not there. It is now False, with narrow per-package overrides for the
+#     generated protobuf packages instead of a blanket one.
+#   * mypy could not run at all. django-stubs 6.1.0 is the newest release and its plugin
+#     crashes under mypy 2 with "Error constructing plugin instance of NewSemanalDjangoPlugin",
+#     so mypy is pinned to 1.18.2 until django-stubs supports mypy 2.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  DJANGO_SETTINGS_MODULE: config.settings
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    env:
+      # Config values only — the settings module refuses to import without them, and none is a
+      # credential. SECRET_KEY is long enough to pass the length check and is not the deployed
+      # key; nothing in this job connects to anything.
+      SECRET_KEY: type-check-only-not-a-deployed-key-000000
+      DB_NAME: kinetix_catalog_dev
+      DB_USER: typecheck
+      DB_PASSWORD: typecheck
+      ALLOWED_HOSTS: localhost
+      DEBUG: "False"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpq-dev
+      - run: pip install -r requirements.txt
+      - run: mypy --config-file mypy.ini core config
+
+  pytest:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci-ephemeral-not-a-deployed-credential
+          POSTGRES_DB: kinetix_catalog_dev
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U ci"
+          --health-interval=10s --health-timeout=5s --health-retries=5
+
+    env:
+      SECRET_KEY: test-run-only-not-a-deployed-key-0000000
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DB_NAME: kinetix_catalog_dev
+      DB_USER: ci
+      DB_PASSWORD: ci-ephemeral-not-a-deployed-credential
+      ALLOWED_HOSTS: localhost
+      DEBUG: "False"
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpq-dev
+      - run: pip install -r requirements.txt
+
+      - name: Migrate an empty database
+        run: python manage.py migrate --noinput
+
+      # `--check` fails when the models have drifted ahead of the migrations, which is exactly
+      # how products.merchant_id and products.is_active came to exist in the model and not in
+      # the schema — every catalog request 500'd on "column products.merchant_id does not exist".
+      - name: Models must not have drifted from the migrations
+        run: python manage.py makemigrations --check --dry-run
+
+      - run: python -m pytest -q --junitxml=report.xml
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pytest-report
+          path: report.xml
+          retention-days: 7

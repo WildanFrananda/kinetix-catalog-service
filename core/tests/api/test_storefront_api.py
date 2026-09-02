@@ -20,37 +20,10 @@ class TestStorefrontAPI:
         data = response.json()
         assert data["count"] >= 1
 
-    def test_post_checkout_returns_201_created(self) -> None:
-        client = APIClient()
-        url = reverse("checkout")
-
-        payload = {
-            "buyer_name": "Charlie Brown",
-            "buyer_phone": "0899887766",
-            "street_address": "Jl. MH Thamrin 9",
-            "city": "Jakarta",
-            "postal_code": "10350",
-            "items": [
-                {
-                    "sku": "HOODIE-GRY-L",
-                    "product_name": "Grey Hoodie L",
-                    "quantity": 1,
-                    "price": "450000.00"
-                }
-            ]
-        }
-
-        response = client.post(url, payload, format="json")
-        assert response.status_code == 201
-
-    def test_post_reserve_cart_stock_returns_200(self) -> None:
-        client = APIClient()
-        url = reverse("cart-reserve-stock")
-
-        payload = {
-            "sku": "TSHIRT-BLK-M",
-            "quantity": 2
-        }
-
-        response = client.post(url, payload, format="json")
-        assert response.status_code == 200
+# Two tests were removed here: test_post_checkout_returns_201_created and
+# test_post_reserve_cart_stock_returns_200. They called reverse("checkout") and
+# reverse("cart-reserve-stock"), routes that do not exist in core/urls.py and must not — the
+# checkout and stock-reservation payloads belong to order-service and warehouse-service. Their
+# serializers were the four removed in S2 for the same reason; these were the test-side
+# remnant of the same domain-boundary violation. Restoring the views to make them pass would
+# reinstate it.

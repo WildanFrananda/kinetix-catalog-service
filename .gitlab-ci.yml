@@ -1,0 +1,97 @@
+# Kinetix catalog CI — GitLab.
+#
+# ⚠ PAIRED FILE: .github/workflows/ci.yml
+# `origin` is GitHub and GitLab is a mirror. Both assert the same things and must be changed
+# together; if they drift, the two platforms disagree about whether the same commit is good.
+#
+# The job that matters here is `typecheck`. Catalog shipped a package whose __init__.py
+# imported four serializer modules that did not exist, so every import raised
+# ModuleNotFoundError and the container restart-looped. Two settings hid it: a blanket
+# `ignore_missing_imports = True`, and a mypy that could not start at all because
+# django-stubs 6.1.0 crashes under mypy 2. Both are fixed, and both are verified here.
+
+include:
+  - project: 'WildanFrananda/kinetix-infrastructure'
+    ref: main
+    file: '/ci/service-ci.yml'
+
+stages:
+  - verify
+  - build
+  - test
+
+variables:
+  DJANGO_SETTINGS_MODULE: config.settings
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+.python:
+  image: python:3.14-slim
+  before_script:
+    - apt-get update -qq && apt-get install -y --no-install-recommends libpq-dev gcc
+    - pip install --quiet -r requirements.txt
+  cache:
+    key:
+      files:
+        - requirements.txt
+    paths:
+      - .cache/pip
+
+secret-scan:
+  extends: .secret-scan
+
+build-image:
+  extends: .build-image
+
+typecheck:
+  extends: .python
+  stage: verify
+  variables:
+    # Config values only — the settings module refuses to import without them, and none is a
+    # credential. SECRET_KEY is long enough to pass the length check and is not the deployed
+    # key; nothing in this job connects to anything.
+    SECRET_KEY: type-check-only-not-a-deployed-key-000000
+    DB_NAME: kinetix_catalog_dev
+    DB_USER: typecheck
+    DB_PASSWORD: typecheck
+    ALLOWED_HOSTS: localhost
+    DEBUG: "False"
+  script:
+    - mypy --config-file mypy.ini core config
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+pytest:
+  extends: .python
+  stage: test
+  services:
+    - name: postgres:16-alpine
+      alias: postgres
+  variables:
+    POSTGRES_USER: ci
+    POSTGRES_PASSWORD: ci-ephemeral-not-a-deployed-credential
+    POSTGRES_DB: kinetix_catalog_dev
+    POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+    SECRET_KEY: test-run-only-not-a-deployed-key-0000000
+    DB_HOST: postgres
+    DB_PORT: "5432"
+    DB_NAME: kinetix_catalog_dev
+    DB_USER: ci
+    DB_PASSWORD: ci-ephemeral-not-a-deployed-credential
+    ALLOWED_HOSTS: localhost
+    DEBUG: "False"
+  script:
+    - python manage.py migrate --noinput
+    # `--check` fails when the models have drifted ahead of the migrations, which is exactly
+    # how products.merchant_id and products.is_active came to exist in the model and not in the
+    # schema — every catalog request 500'd on "column products.merchant_id does not exist".
+    - python manage.py makemigrations --check --dry-run
+    - python -m pytest -q --junitxml=report.xml
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+    expire_in: 1 week
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
