@@ -16,3 +16,4 @@ types-grpcio==1.0.0.20250703
 pytest==8.4.2
 pytest-django==4.11.1
 PyJWT[crypto]==2.10.1
+kinetix-contracts==1.0.5

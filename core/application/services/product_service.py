@@ -41,7 +41,9 @@ class ProductService:
         if paginated_products:
             with ThreadPoolExecutor(max_workers=min(len(paginated_products), 10)) as executor:
                 futures = {
-                    executor.submit(self._bin_stock_port.get_bin_stock_info, p.sku): p.sku
+                    executor.submit(
+                        self._bin_stock_port.get_bin_stock_info, p.sku, _merchant_principal_of(p)
+                    ): p.sku
                     for p in paginated_products
                 }
                 for future in futures:
@@ -85,7 +87,7 @@ class ProductService:
             return None
 
         try:
-            stock = self._bin_stock_port.get_bin_stock_info(sku)
+            stock = self._bin_stock_port.get_bin_stock_info(sku, _merchant_principal_of(p))
         except Exception:
             stock = StockInfo(sku=sku, bin_location="Unavailable", available_quantity=0, reserved_quantity=0)
 
@@ -181,3 +183,6 @@ class ProductService:
             raise PermissionError("Product does not belong to this merchant")
 
         return self._product_repo.delete(product_id)
+
+def _merchant_principal_of(product: object) -> str:
+    return str(getattr(product, "merchant_principal_id", "") or "")

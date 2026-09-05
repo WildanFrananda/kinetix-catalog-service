@@ -1,95 +1,96 @@
-import os
-import sys
-from typing import Dict, Any, Optional
-
-generated_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "generated"))
-if generated_dir not in sys.path:
-    sys.path.insert(0, generated_dir)
+from typing import Any, Dict, Optional
 
 import grpc
+from fulfillment.v1 import fulfillment_pb2, fulfillment_pb2_grpc
 
+from core.domain.entities.stock_info import StockInfo
+from core.domain.repositories import BinStockServicePort
 from core.infrastructure.grpc.required_env import required_env
 from core.infrastructure.security import channel_credentials
-from core.domain.repositories import BinStockServicePort
-from core.domain.entities.stock_info import StockInfo
-
-try:
-    from fulfillment.v1 import bin_stock_service_pb2, bin_stock_service_pb2_grpc
-except ImportError:
-    from core.infrastructure.grpc.generated.fulfillment.v1 import bin_stock_service_pb2, bin_stock_service_pb2_grpc
 
 
 class BinStockGrpcClient(BinStockServicePort):
     def __init__(self, target_host: Optional[str] = None) -> None:
         self._target_host: str = target_host or required_env("WAREHOUSE_GRPC_URL")
         self._channel = grpc.secure_channel(self._target_host, channel_credentials())
-        self._stub = bin_stock_service_pb2_grpc.BinStockServiceStub(self._channel)
+        self._stub = fulfillment_pb2_grpc.BinStockServiceStub(self._channel)
 
-    def get_bin_stock_info(self, sku: str) -> StockInfo:
+    def get_bin_stock_info(self, sku: str, merchant_principal_id: str) -> StockInfo:
         try:
-            req = bin_stock_service_pb2.CheckBinStockRequest(
-                sku=sku
-            )
-            response = self._stub.CheckBinStock(req, timeout=5.0)
-            return StockInfo(
-                sku=response.sku,
-                bin_location=response.bin_location,
-                available_quantity=response.available_stock,
-                reserved_quantity=response.allocated_stock,
+            response = self._stub.CheckBinStock(
+                fulfillment_pb2.CheckBinStockRequest(
+                    merchant_principal_id=merchant_principal_id, sku=sku
+                ),
+                timeout=5.0,
             )
         except grpc.RpcError:
-            return StockInfo(
-                sku=sku,
-                bin_location="N/A",
-                available_quantity=0,
-                reserved_quantity=0,
-            )
+            return _unknown_stock(sku)
 
-    def check_bin_stock(self, sku: str) -> Dict[str, Any]:
+        if not response.found:
+            return _unknown_stock(sku)
+
+        return StockInfo(
+            sku=response.sku,
+            bin_location=response.bin_location,
+            available_quantity=response.available_stock,
+            reserved_quantity=response.allocated_stock,
+        )
+
+    def check_bin_stock(self, sku: str, merchant_principal_id: str) -> Dict[str, Any]:
         try:
-            req = bin_stock_service_pb2.CheckBinStockRequest(
-                sku=sku
+            response = self._stub.CheckBinStock(
+                fulfillment_pb2.CheckBinStockRequest(
+                    merchant_principal_id=merchant_principal_id, sku=sku
+                ),
+                timeout=5.0,
             )
-            response = self._stub.CheckBinStock(req, timeout=5.0)
-            return {
-                "success": True,
-                "sku": response.sku,
-                "product_name": response.product_name,
-                "physical_stock": response.physical_stock,
-                "allocated_stock": response.allocated_stock,
-                "available_stock": response.available_stock,
-                "bin_location": response.bin_location,
-                "low_stock_warning": response.low_stock_warning,
-            }
+        except grpc.RpcError as rpc_error:
+            return {"success": False, "error": f"gRPC CheckBinStock failed: {rpc_error.details()}"}
+
+        if not response.found:
+            return {"success": False, "error": f"warehouse holds no stock record for {sku}"}
+
+        return {
+            "success": True,
+            "sku": response.sku,
+            "product_name": response.product_name,
+            "physical_stock": response.physical_stock,
+            "allocated_stock": response.allocated_stock,
+            "available_stock": response.available_stock,
+            "bin_location": response.bin_location,
+            "low_stock_warning": response.low_stock_warning,
+        }
+
+    def reserve_stock(self, sku: str, quantity: int, merchant_principal_id: str) -> Dict[str, Any]:
+        try:
+            response = self._stub.ReserveStock(
+                fulfillment_pb2.ReserveStockRequest(
+                    merchant_principal_id=merchant_principal_id,
+                    sku=sku,
+                    quantity=quantity,
+                    order_number="",
+                ),
+                timeout=5.0,
+            )
         except grpc.RpcError as rpc_error:
             return {
                 "success": False,
-                "error": f"gRPC CheckBinStock failed: {rpc_error.details()}"
-            }
-
-    def reserve_stock(self, sku: str, quantity: int) -> Dict[str, Any]:
-        try:
-            req = bin_stock_service_pb2.ReserveStockRequest(
-                sku=sku,
-                quantity=quantity,
-                order_number=""
-            )
-            response = self._stub.ReserveStock(req, timeout=5.0)
-
-            if response.HasField("error"):
-                return {
-                    "success": False,
-                    "error": f"Reservation failed ({response.error.code}): {response.error.message}"
-                }
-
-            return {
-                "success": response.success,
-                "bin_location": response.bin_location,
-                "remaining_available": response.remaining_available
-            }
-        except grpc.RpcError:
-            return {
-                "success": True,
                 "unavailable": True,
-                "message": "gRPC server unreachable. Operating in offline reservation mode."
+                "error": f"warehouse is unreachable, so no stock was reserved: {rpc_error.details()}",
             }
+
+        if response.HasField("error"):
+            return {
+                "success": False,
+                "error": f"reservation refused ({response.error.error_code}): {response.error.message}",
+            }
+
+        return {
+            "success": response.success,
+            "bin_location": response.bin_location,
+            "remaining_available": response.remaining_available,
+        }
+
+def _unknown_stock(sku: str) -> StockInfo:
+    """What this service knows about a SKU warehouse cannot account for: nothing."""
+    return StockInfo(sku=sku, bin_location="", available_quantity=0, reserved_quantity=0)
