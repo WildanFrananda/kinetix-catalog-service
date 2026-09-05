@@ -9,6 +9,7 @@ if generated_dir not in sys.path:
 
 import grpc
 
+from core.infrastructure.grpc.required_env import required_env
 from core.infrastructure.security import channel_credentials
 from core.domain.repositories import PricingServicePort
 
@@ -19,7 +20,7 @@ except ImportError:
 
 class PricingGrpcClient(PricingServicePort):
     def __init__(self, target_host: Optional[str] = None) -> None:
-        self._target_host: str = target_host or os.environ.get("PRICING_GRPC_HOST", "kinetix-pricing-service:50054")
+        self._target_host: str = target_host or required_env("PRICING_GRPC_URL")
         self._channel = grpc.secure_channel(self._target_host, channel_credentials())
         self._stub = pricing_service_pb2_grpc.PricingServiceStub(self._channel)
 
