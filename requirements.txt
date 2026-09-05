@@ -15,3 +15,4 @@ types-protobuf==7.34.1.20260816
 types-grpcio==1.0.0.20250703
 pytest==8.4.2
 pytest-django==4.11.1
+PyJWT[crypto]==2.10.1

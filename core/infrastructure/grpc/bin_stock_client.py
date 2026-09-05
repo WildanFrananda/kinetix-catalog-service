@@ -7,6 +7,8 @@ if generated_dir not in sys.path:
     sys.path.insert(0, generated_dir)
 
 import grpc
+
+from core.infrastructure.security import channel_credentials
 from core.domain.repositories import BinStockServicePort
 from core.domain.entities.stock_info import StockInfo
 
@@ -19,7 +21,7 @@ except ImportError:
 class BinStockGrpcClient(BinStockServicePort):
     def __init__(self, target_host: Optional[str] = None) -> None:
         self._target_host = target_host or os.environ.get("OMS_GRPC_HOST", "localhost:50051")
-        self._channel = grpc.insecure_channel(self._target_host)
+        self._channel = grpc.secure_channel(self._target_host, channel_credentials())
         self._stub = bin_stock_service_pb2_grpc.BinStockServiceStub(self._channel)
 
     def get_bin_stock_info(self, sku: str) -> StockInfo:

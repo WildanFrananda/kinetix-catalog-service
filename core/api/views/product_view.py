@@ -1,6 +1,8 @@
 from dataclasses import asdict
 from typing import Dict, Any, Optional
 from rest_framework.views import APIView
+
+from core.infrastructure.security import IdentityTokenAuthentication, Principal
 from rest_framework.response import Response
 from rest_framework.request import Request
 from rest_framework import status
@@ -9,6 +11,7 @@ from core.api.serializers import ProductDetailSerializer, ProductListResponseSer
 from core.application.dto import ProductFilterDTO
 
 class ProductView(APIView):
+    authentication_classes = [IdentityTokenAuthentication]
     def get(self, request: Request, sku: Optional[str] = None) -> Response:
         service = get_product_service()
         if sku is not None:
@@ -38,13 +41,12 @@ class ProductView(APIView):
         return Response(response_serializer.data, status=status.HTTP_200_OK)
 
     def post(self, request: Request) -> Response:
-        user_id_header = request.headers.get("X-User-Id")
-        if not user_id_header:
-            return Response({"error": "X-User-Id header is required"}, status=status.HTTP_401_UNAUTHORIZED)
-        try:
-            merchant_id = int(user_id_header)
-        except ValueError:
-            return Response({"error": "Invalid X-User-Id header"}, status=status.HTTP_401_UNAUTHORIZED)
+        principal = request.user if isinstance(request.user, Principal) else None
+        if principal is None:
+            return Response({"error": "a verified access token is required"}, status=status.HTTP_401_UNAUTHORIZED)
+        if principal.role not in ("seller", "admin"):
+            return Response({"error": "this account may not manage products"}, status=status.HTTP_403_FORBIDDEN)
+        merchant_id = principal.user_id
 
         service = get_product_service()
         body: Dict[str, Any] = request.data if isinstance(request.data, dict) else {}
@@ -65,13 +67,12 @@ class ProductView(APIView):
             return Response({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
 
     def put(self, request: Request, product_id: int) -> Response:
-        user_id_header = request.headers.get("X-User-Id")
-        if not user_id_header:
-            return Response({"error": "X-User-Id header is required"}, status=status.HTTP_401_UNAUTHORIZED)
-        try:
-            merchant_id = int(user_id_header)
-        except ValueError:
-            return Response({"error": "Invalid X-User-Id header"}, status=status.HTTP_401_UNAUTHORIZED)
+        principal = request.user if isinstance(request.user, Principal) else None
+        if principal is None:
+            return Response({"error": "a verified access token is required"}, status=status.HTTP_401_UNAUTHORIZED)
+        if principal.role not in ("seller", "admin"):
+            return Response({"error": "this account may not manage products"}, status=status.HTTP_403_FORBIDDEN)
+        merchant_id = principal.user_id
 
         service = get_product_service()
         body: Dict[str, Any] = request.data if isinstance(request.data, dict) else {}
@@ -91,13 +92,12 @@ class ProductView(APIView):
             return Response({"error": str(pe)}, status=status.HTTP_403_FORBIDDEN)
 
     def delete(self, request: Request, product_id: int) -> Response:
-        user_id_header = request.headers.get("X-User-Id")
-        if not user_id_header:
-            return Response({"error": "X-User-Id header is required"}, status=status.HTTP_401_UNAUTHORIZED)
-        try:
-            merchant_id = int(user_id_header)
-        except ValueError:
-            return Response({"error": "Invalid X-User-Id header"}, status=status.HTTP_401_UNAUTHORIZED)
+        principal = request.user if isinstance(request.user, Principal) else None
+        if principal is None:
+            return Response({"error": "a verified access token is required"}, status=status.HTTP_401_UNAUTHORIZED)
+        if principal.role not in ("seller", "admin"):
+            return Response({"error": "this account may not manage products"}, status=status.HTTP_403_FORBIDDEN)
+        merchant_id = principal.user_id
 
         service = get_product_service()
         try:

@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.urls import path, include
 
-from core.api.views.health_view import HealthView, ReadinessView
+from core.api.views import HealthView, ReadinessView
 
 urlpatterns = [
     path('admin/', admin.site.urls),

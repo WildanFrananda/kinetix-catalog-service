@@ -1,4 +1,5 @@
 from typing import List, Dict, Optional, Any
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 from core.domain.repositories import ProductRepository, BinStockServicePort
@@ -11,6 +12,8 @@ from core.application.dto import (
     ProductDetailDTO,
     WarehouseStockDTO,
 )
+
+logger = logging.getLogger(__name__)
 
 class ProductService:
     def __init__(
@@ -45,7 +48,10 @@ class ProductService:
                     sku = futures[future]
                     try:
                         stock_map[sku] = future.result()
-                    except Exception:
+                    except Exception as exc:
+                        logger.warning(
+                            "bin stock lookup failed for %s; reporting it as unavailable: %s", sku, exc
+                        )
                         stock_map[sku] = StockInfo(sku=sku, bin_location="Unavailable", available_quantity=0, reserved_quantity=0)
 
         summaries: List[ProductSummaryDTO] = []
