@@ -1,6 +1,7 @@
 from typing import List, Dict, Optional, Any
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from decimal import Decimal
 from core.domain.repositories import ProductRepository, BinStockServicePort
 from core.domain.repositories.identity_service_port import IdentityServicePort
@@ -39,10 +40,14 @@ class ProductService:
 
         stock_map: Dict[str, StockInfo] = {}
         if paginated_products:
+            context = copy_context()
             with ThreadPoolExecutor(max_workers=min(len(paginated_products), 10)) as executor:
                 futures = {
                     executor.submit(
-                        self._bin_stock_port.get_bin_stock_info, p.sku, _merchant_principal_of(p)
+                        context.run,
+                        self._bin_stock_port.get_bin_stock_info,
+                        p.sku,
+                        _merchant_principal_of(p),
                     ): p.sku
                     for p in paginated_products
                 }
