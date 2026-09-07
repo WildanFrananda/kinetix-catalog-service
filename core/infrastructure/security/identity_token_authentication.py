@@ -1,3 +1,4 @@
+import logging
 from typing import Optional, Tuple
 
 from rest_framework.authentication import BaseAuthentication
@@ -7,6 +8,8 @@ from rest_framework.request import Request
 from core.infrastructure.security.access_claims import AccessClaims
 from core.infrastructure.security.principal import Principal
 from core.infrastructure.security.token_verifier import TokenVerifier
+
+logger = logging.getLogger(__name__)
 
 class IdentityTokenAuthentication(BaseAuthentication):
     keyword = "Bearer"
@@ -20,7 +23,8 @@ class IdentityTokenAuthentication(BaseAuthentication):
 
         try:
             claims = TokenVerifier.shared().verify_access(parts[1])
-        except Exception:
+        except Exception as cause:
+            logger.warning("token verification failed: %s", cause)
             raise AuthenticationFailed("Invalid token")
 
         principal = Principal(

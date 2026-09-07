@@ -40,11 +40,10 @@ class ProductService:
 
         stock_map: Dict[str, StockInfo] = {}
         if paginated_products:
-            context = copy_context()
             with ThreadPoolExecutor(max_workers=min(len(paginated_products), 10)) as executor:
                 futures = {
                     executor.submit(
-                        context.run,
+                        copy_context().run,
                         self._bin_stock_port.get_bin_stock_info,
                         p.sku,
                         _merchant_principal_of(p),

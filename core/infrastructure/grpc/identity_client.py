@@ -6,6 +6,7 @@ from identity.v1 import identity_pb2, identity_pb2_grpc
 
 from core.domain.repositories.identity_service_port import IdentityServicePort
 from core.infrastructure.grpc.required_env import required_env
+from core.infrastructure.resilience import CircuitBreaker, CircuitOpenError
 from core.infrastructure.security import channel_credentials
 from core.infrastructure.observability import request_id_metadata
 
@@ -36,22 +37,24 @@ class IdentityGrpcClient(IdentityServicePort):
         self._target_host: str = target_host or required_env("IDENTITY_GRPC_URL")
         self._channel = grpc.secure_channel(self._target_host, channel_credentials())
         self._stub = identity_pb2_grpc.IdentityServiceStub(self._channel)
+        self._breaker = CircuitBreaker("identity-merchant")
 
     def get_merchant_info(self, merchant_principal_id: str) -> Optional[Dict[str, Any]]:
         if not merchant_principal_id:
             return None
 
+        request = identity_pb2.GetMerchantInfoRequest(principal_id=merchant_principal_id)
+        metadata = request_id_metadata()
+
         try:
-            response = self._stub.GetMerchantInfo(
-                identity_pb2.GetMerchantInfoRequest(principal_id=merchant_principal_id),
-                timeout=5,
-                metadata=request_id_metadata(),
+            response = self._breaker.call(
+                lambda: self._stub.GetMerchantInfo(request, timeout=5, metadata=metadata)
             )
-        except grpc.RpcError as error:
+        except (grpc.RpcError, CircuitOpenError) as error:
             logger.error(
                 "identity did not answer for merchant %s (%s); treating the merchant as unverified",
                 merchant_principal_id,
-                error.code(),
+                error,
             )
             return None
 

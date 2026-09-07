@@ -1,3 +1,4 @@
+import logging
 from typing import Any, Dict, Optional
 
 import grpc
@@ -6,8 +7,11 @@ from fulfillment.v1 import fulfillment_pb2, fulfillment_pb2_grpc
 from core.domain.entities.stock_info import StockInfo
 from core.domain.repositories import BinStockServicePort
 from core.infrastructure.grpc.required_env import required_env
+from core.infrastructure.resilience import CircuitBreaker, CircuitOpenError
 from core.infrastructure.security import channel_credentials
 from core.infrastructure.observability import request_id_metadata
+
+logger = logging.getLogger(__name__)
 
 
 class BinStockGrpcClient(BinStockServicePort):
@@ -15,17 +19,20 @@ class BinStockGrpcClient(BinStockServicePort):
         self._target_host: str = target_host or required_env("WAREHOUSE_GRPC_URL")
         self._channel = grpc.secure_channel(self._target_host, channel_credentials())
         self._stub = fulfillment_pb2_grpc.BinStockServiceStub(self._channel)
+        self._breaker = CircuitBreaker("warehouse-bin-stock")
 
     def get_bin_stock_info(self, sku: str, merchant_principal_id: str) -> StockInfo:
+        request = fulfillment_pb2.CheckBinStockRequest(
+            merchant_principal_id=merchant_principal_id, sku=sku
+        )
+        metadata = request_id_metadata()
+
         try:
-            response = self._stub.CheckBinStock(
-                fulfillment_pb2.CheckBinStockRequest(
-                    merchant_principal_id=merchant_principal_id, sku=sku
-                ),
-                timeout=5.0,
-                metadata=request_id_metadata(),
+            response = self._breaker.call(
+                lambda: self._stub.CheckBinStock(request, timeout=5.0, metadata=metadata)
             )
-        except grpc.RpcError:
+        except (grpc.RpcError, CircuitOpenError) as error:
+            logger.warning("warehouse did not answer for %s (%s); stock reported as none", sku, error)
             return _unknown_stock(sku)
 
         if not response.found:
@@ -39,14 +46,17 @@ class BinStockGrpcClient(BinStockServicePort):
         )
 
     def check_bin_stock(self, sku: str, merchant_principal_id: str) -> Dict[str, Any]:
+        request = fulfillment_pb2.CheckBinStockRequest(
+            merchant_principal_id=merchant_principal_id, sku=sku
+        )
+        metadata = request_id_metadata()
+
         try:
-            response = self._stub.CheckBinStock(
-                fulfillment_pb2.CheckBinStockRequest(
-                    merchant_principal_id=merchant_principal_id, sku=sku
-                ),
-                timeout=5.0,
-                metadata=request_id_metadata(),
+            response = self._breaker.call(
+                lambda: self._stub.CheckBinStock(request, timeout=5.0, metadata=metadata)
             )
+        except CircuitOpenError as circuit_open:
+            return {"success": False, "error": str(circuit_open)}
         except grpc.RpcError as rpc_error:
             return {"success": False, "error": f"gRPC CheckBinStock failed: {rpc_error.details()}"}
 
@@ -65,17 +75,24 @@ class BinStockGrpcClient(BinStockServicePort):
         }
 
     def reserve_stock(self, sku: str, quantity: int, merchant_principal_id: str) -> Dict[str, Any]:
+        request = fulfillment_pb2.ReserveStockRequest(
+            merchant_principal_id=merchant_principal_id,
+            sku=sku,
+            quantity=quantity,
+            order_number="",
+        )
+        metadata = request_id_metadata()
+
         try:
-            response = self._stub.ReserveStock(
-                fulfillment_pb2.ReserveStockRequest(
-                    merchant_principal_id=merchant_principal_id,
-                    sku=sku,
-                    quantity=quantity,
-                    order_number="",
-                ),
-                timeout=5.0,
-                metadata=request_id_metadata(),
+            response = self._breaker.call(
+                lambda: self._stub.ReserveStock(request, timeout=5.0, metadata=metadata)
             )
+        except CircuitOpenError as circuit_open:
+            return {
+                "success": False,
+                "unavailable": True,
+                "error": f"warehouse is not being called right now, so no stock was reserved: {circuit_open}",
+            }
         except grpc.RpcError as rpc_error:
             return {
                 "success": False,

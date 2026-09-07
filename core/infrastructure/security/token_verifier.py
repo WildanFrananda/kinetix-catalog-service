@@ -14,7 +14,9 @@ class TokenVerifier:
     def __init__(self) -> None:
         self._issuer: str = self._required("JWT_ISSUER")
         self._audience: str = self._required("JWT_AUDIENCE")
-        self._jwks: PyJWKClient = PyJWKClient(self._required("IDENTITY_JWKS_URL"), cache_keys=True)
+        self._jwks: PyJWKClient = PyJWKClient(
+            self._required("IDENTITY_JWKS_URL"), cache_keys=True, timeout=3
+        )
 
     @staticmethod
     def _required(name: str) -> str:
