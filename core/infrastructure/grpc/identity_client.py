@@ -7,6 +7,7 @@ from identity.v1 import identity_pb2, identity_pb2_grpc
 from core.domain.repositories.identity_service_port import IdentityServicePort
 from core.infrastructure.grpc.required_env import required_env
 from core.infrastructure.security import channel_credentials
+from core.infrastructure.observability import request_id_metadata
 
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,7 @@ class IdentityGrpcClient(IdentityServicePort):
             response = self._stub.GetMerchantInfo(
                 identity_pb2.GetMerchantInfoRequest(principal_id=merchant_principal_id),
                 timeout=5,
+                metadata=request_id_metadata(),
             )
         except grpc.RpcError as error:
             logger.error(

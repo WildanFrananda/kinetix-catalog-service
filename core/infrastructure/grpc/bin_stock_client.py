@@ -7,6 +7,7 @@ from core.domain.entities.stock_info import StockInfo
 from core.domain.repositories import BinStockServicePort
 from core.infrastructure.grpc.required_env import required_env
 from core.infrastructure.security import channel_credentials
+from core.infrastructure.observability import request_id_metadata
 
 
 class BinStockGrpcClient(BinStockServicePort):
@@ -22,6 +23,7 @@ class BinStockGrpcClient(BinStockServicePort):
                     merchant_principal_id=merchant_principal_id, sku=sku
                 ),
                 timeout=5.0,
+                metadata=request_id_metadata(),
             )
         except grpc.RpcError:
             return _unknown_stock(sku)
@@ -43,6 +45,7 @@ class BinStockGrpcClient(BinStockServicePort):
                     merchant_principal_id=merchant_principal_id, sku=sku
                 ),
                 timeout=5.0,
+                metadata=request_id_metadata(),
             )
         except grpc.RpcError as rpc_error:
             return {"success": False, "error": f"gRPC CheckBinStock failed: {rpc_error.details()}"}
@@ -71,6 +74,7 @@ class BinStockGrpcClient(BinStockServicePort):
                     order_number="",
                 ),
                 timeout=5.0,
+                metadata=request_id_metadata(),
             )
         except grpc.RpcError as rpc_error:
             return {

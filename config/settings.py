@@ -55,6 +55,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    'core.infrastructure.observability.RequestIdMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -130,3 +131,30 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 WAREHOUSE_GRPC_HOST = os.environ.get("WAREHOUSE_GRPC_HOST", "localhost")
 WAREHOUSE_GRPC_PORT = int(os.environ.get("WAREHOUSE_GRPC_PORT", "50051"))
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'filters': {
+        'request_id': {
+            '()': 'core.infrastructure.observability.RequestIdLogFilter',
+        },
+    },
+    'formatters': {
+        'kinetix': {
+            'format': '{asctime} {levelname} [{request_id}] {name}: {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'filters': ['request_id'],
+            'formatter': 'kinetix',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+}

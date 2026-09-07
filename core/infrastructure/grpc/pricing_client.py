@@ -9,6 +9,7 @@ from core.domain.repositories import PricingServicePort
 from core.infrastructure.grpc.money import from_money, to_money
 from core.infrastructure.grpc.required_env import required_env
 from core.infrastructure.security import channel_credentials
+from core.infrastructure.observability import request_id_metadata
 
 
 logger = logging.getLogger(__name__)
@@ -43,7 +44,7 @@ class PricingGrpcClient(PricingServicePort):
         )
 
         try:
-            res = self._stub.CalculatePrice(req, timeout=5)
+            res = self._stub.CalculatePrice(req, timeout=5, metadata=request_id_metadata())
             return {
                 "success": True,
                 "subtotal": from_money(res.subtotal),
