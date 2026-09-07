@@ -39,7 +39,7 @@ class DjangoProductRepository(ProductRepository):
                 "currency": product.currency,
                 "image_url": product.image_url,
                 "category": category_orm,
-                "merchant_id": product.merchant_id,
+                "merchant_principal_id": product.merchant_principal_id,
                 "is_active": product.is_active,
             }
         )
@@ -86,7 +86,7 @@ class DjangoProductRepository(ProductRepository):
             currency=orm_p.currency,
             image_url=orm_p.image_url,
             category=category,
-            merchant_id=orm_p.merchant_id,
+            merchant_principal_id=orm_p.merchant_principal_id,
             is_active=orm_p.is_active,
             created_at=orm_p.created_at
         )

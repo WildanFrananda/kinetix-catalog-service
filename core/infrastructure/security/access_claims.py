@@ -9,6 +9,5 @@ class AccessClaims(TypedDict):
     exp: int
     iat: int
     token_use: str
-    uid: int
     email: str
     role: str

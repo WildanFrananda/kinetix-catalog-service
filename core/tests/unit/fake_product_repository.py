@@ -36,7 +36,7 @@ class FakeProductRepository(ProductRepository):
             currency=product.currency,
             image_url=product.image_url,
             category=product.category,
-            merchant_id=product.merchant_id,
+            merchant_principal_id=product.merchant_principal_id,
             is_active=product.is_active
         )
         self._store[product.sku] = saved
@@ -54,7 +54,7 @@ class FakeProductRepository(ProductRepository):
                 currency=p.currency,
                 image_url=p.image_url,
                 category=p.category,
-                merchant_id=p.merchant_id,
+                merchant_principal_id=p.merchant_principal_id,
                 is_active=False
             )
             return True

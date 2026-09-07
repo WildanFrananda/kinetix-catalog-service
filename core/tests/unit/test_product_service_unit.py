@@ -42,7 +42,7 @@ class TestProductServiceUnit:
         cat = repo.save_category(Category(id=None, name="Shoes", slug="shoes"))
 
         service = ProductService(product_repo=repo, bin_stock_port=port)
-        product = service.create_product(merchant_id=50, data={
+        product = service.create_product(merchant_principal_id="3c9a77b1-58de-4a01-8f2e-6d4b19c0a8f3", data={
             "sku": "SHOES-RUN-42",
             "title": "Running Shoes 42",
             "description": "Pro running shoes",
@@ -52,7 +52,7 @@ class TestProductServiceUnit:
 
         assert product.id is not None
         assert product.sku == "SHOES-RUN-42"
-        assert product.merchant_id == 50
+        assert product.merchant_principal_id == "3c9a77b1-58de-4a01-8f2e-6d4b19c0a8f3"
 
     def test_update_product_idor_protection_rejects_other_merchant(self) -> None:
         repo = FakeProductRepository()
@@ -60,7 +60,7 @@ class TestProductServiceUnit:
         cat = repo.save_category(Category(id=1, name="Shoes", slug="shoes"))
 
         service = ProductService(product_repo=repo, bin_stock_port=port)
-        p = service.create_product(merchant_id=50, data={
+        p = service.create_product(merchant_principal_id="3c9a77b1-58de-4a01-8f2e-6d4b19c0a8f3", data={
             "sku": "SHOES-50",
             "title": "Merchant 50 Product",
             "price": "100000.00",
@@ -69,7 +69,7 @@ class TestProductServiceUnit:
 
         assert p.id is not None
         with pytest.raises(PermissionError, match="Product does not belong to this merchant"):
-            service.update_product(product_id=p.id, merchant_id=999, data={"title": "Hacked Title"})
+            service.update_product(product_id=p.id, merchant_principal_id="9f1d4a3e-1c62-4d0a-9a7b-2f5c8e0b41d7", data={"title": "Hacked Title"})
 
     def test_delete_product_idor_protection_rejects_other_merchant(self) -> None:
         repo = FakeProductRepository()
@@ -77,7 +77,7 @@ class TestProductServiceUnit:
         cat = repo.save_category(Category(id=1, name="Shoes", slug="shoes"))
 
         service = ProductService(product_repo=repo, bin_stock_port=port)
-        p = service.create_product(merchant_id=50, data={
+        p = service.create_product(merchant_principal_id="3c9a77b1-58de-4a01-8f2e-6d4b19c0a8f3", data={
             "sku": "SHOES-50",
             "title": "Merchant 50 Product",
             "price": "100000.00",
@@ -86,7 +86,7 @@ class TestProductServiceUnit:
 
         assert p.id is not None
         with pytest.raises(PermissionError, match="Product does not belong to this merchant"):
-            service.delete_product(product_id=p.id, merchant_id=999)
+            service.delete_product(product_id=p.id, merchant_principal_id="9f1d4a3e-1c62-4d0a-9a7b-2f5c8e0b41d7")
 
     def test_category_crud_operations(self) -> None:
         repo = FakeProductRepository()

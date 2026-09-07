@@ -46,17 +46,17 @@ class ProductView(APIView):
             return Response({"error": "a verified access token is required"}, status=status.HTTP_401_UNAUTHORIZED)
         if principal.role not in ("seller", "admin"):
             return Response({"error": "this account may not manage products"}, status=status.HTTP_403_FORBIDDEN)
-        merchant_id = principal.user_id
+        merchant_principal_id = principal.principal_id
 
         service = get_product_service()
         body: Dict[str, Any] = request.data if isinstance(request.data, dict) else {}
         try:
-            product = service.create_product(merchant_id=merchant_id, data=body)
+            product = service.create_product(merchant_principal_id=merchant_principal_id, data=body)
             return Response({
                 "id": product.id,
                 "sku": product.sku,
                 "title": product.title,
-                "merchant_id": product.merchant_id,
+                "merchant_principal_id": product.merchant_principal_id,
                 "category_id": product.category.id,
                 "price": str(product.price),
                 "is_active": product.is_active
@@ -72,19 +72,19 @@ class ProductView(APIView):
             return Response({"error": "a verified access token is required"}, status=status.HTTP_401_UNAUTHORIZED)
         if principal.role not in ("seller", "admin"):
             return Response({"error": "this account may not manage products"}, status=status.HTTP_403_FORBIDDEN)
-        merchant_id = principal.user_id
+        merchant_principal_id = principal.principal_id
 
         service = get_product_service()
         body: Dict[str, Any] = request.data if isinstance(request.data, dict) else {}
         try:
-            product = service.update_product(product_id=product_id, merchant_id=merchant_id, data=body)
+            product = service.update_product(product_id=product_id, merchant_principal_id=merchant_principal_id, data=body)
             if not product:
                 return Response({"error": "Product not found"}, status=status.HTTP_404_NOT_FOUND)
             return Response({
                 "id": product.id,
                 "sku": product.sku,
                 "title": product.title,
-                "merchant_id": product.merchant_id,
+                "merchant_principal_id": product.merchant_principal_id,
                 "price": str(product.price),
                 "is_active": product.is_active
             }, status=status.HTTP_200_OK)
@@ -97,11 +97,11 @@ class ProductView(APIView):
             return Response({"error": "a verified access token is required"}, status=status.HTTP_401_UNAUTHORIZED)
         if principal.role not in ("seller", "admin"):
             return Response({"error": "this account may not manage products"}, status=status.HTTP_403_FORBIDDEN)
-        merchant_id = principal.user_id
+        merchant_principal_id = principal.principal_id
 
         service = get_product_service()
         try:
-            deleted = service.delete_product(product_id=product_id, merchant_id=merchant_id)
+            deleted = service.delete_product(product_id=product_id, merchant_principal_id=merchant_principal_id)
             if not deleted:
                 return Response({"error": "Product not found"}, status=status.HTTP_404_NOT_FOUND)
             return Response(status=status.HTTP_204_NO_CONTENT)

@@ -5,7 +5,7 @@ class ProductModel(models.Model):
     id: int
     objects: models.Manager["ProductModel"]
 
-    merchant_id = models.BigIntegerField(null=True, blank=True, db_index=True)
+    merchant_principal_id = models.CharField(max_length=64, null=True, blank=True, db_index=True)
     sku = models.CharField(max_length=64, unique=True, db_index=True)
     title = models.CharField(max_length=255, db_index=True)
     description = models.TextField(blank=True)

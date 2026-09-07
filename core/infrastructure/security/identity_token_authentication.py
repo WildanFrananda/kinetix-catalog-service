@@ -25,7 +25,6 @@ class IdentityTokenAuthentication(BaseAuthentication):
 
         principal = Principal(
             principal_id=claims["sub"],
-            user_id=claims["uid"],
             email=claims["email"],
             role=claims["role"],
         )

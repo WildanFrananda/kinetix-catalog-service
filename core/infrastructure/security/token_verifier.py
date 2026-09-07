@@ -70,7 +70,6 @@ class TokenVerifier:
             exp=number("exp"),
             iat=number("iat"),
             token_use=token_use,
-            uid=number("uid"),
             email=text("email"),
             role=text("role"),
         )

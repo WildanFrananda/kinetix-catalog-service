@@ -111,9 +111,9 @@ class ProductService:
             warehouse_stock=warehouse
         )
 
-    def create_product(self, merchant_id: int, data: Dict[str, Any]) -> Product:
+    def create_product(self, merchant_principal_id: str, data: Dict[str, Any]) -> Product:
         if self._identity_port:
-            info = self._identity_port.get_merchant_info(merchant_id)
+            info = self._identity_port.get_merchant_info(merchant_principal_id)
             if not info or info.get("status") not in ["verified", "active"]:
                 raise PermissionError("Merchant account is not verified/active")
 
@@ -130,14 +130,14 @@ class ProductService:
             currency=str(data.get("currency", "IDR")),
             image_url=str(data.get("image_url", "")),
             category=cat,
-            merchant_id=merchant_id,
+            merchant_principal_id=merchant_principal_id,
             is_active=True
         )
         return self._product_repo.save(product)
 
-    def update_product(self, product_id: int, merchant_id: int, data: Dict[str, Any]) -> Optional[Product]:
+    def update_product(self, product_id: int, merchant_principal_id: str, data: Dict[str, Any]) -> Optional[Product]:
         if self._identity_port:
-            info = self._identity_port.get_merchant_info(merchant_id)
+            info = self._identity_port.get_merchant_info(merchant_principal_id)
             if not info or info.get("status") not in ["verified", "active"]:
                 raise PermissionError("Merchant account is not verified/active")
 
@@ -145,7 +145,7 @@ class ProductService:
         if not existing:
             return None
 
-        if existing.merchant_id is not None and existing.merchant_id != merchant_id:
+        if existing.merchant_principal_id is not None and existing.merchant_principal_id != merchant_principal_id:
             raise PermissionError("Product does not belong to this merchant")
 
         category = existing.category
@@ -164,14 +164,14 @@ class ProductService:
             currency=str(data.get("currency", existing.currency)),
             image_url=str(data.get("image_url", existing.image_url)),
             category=category,
-            merchant_id=merchant_id,
+            merchant_principal_id=merchant_principal_id,
             is_active=bool(data.get("is_active", existing.is_active))
         )
         return self._product_repo.save(updated)
 
-    def delete_product(self, product_id: int, merchant_id: int) -> bool:
+    def delete_product(self, product_id: int, merchant_principal_id: str) -> bool:
         if self._identity_port:
-            info = self._identity_port.get_merchant_info(merchant_id)
+            info = self._identity_port.get_merchant_info(merchant_principal_id)
             if not info or info.get("status") not in ["verified", "active"]:
                 raise PermissionError("Merchant account is not verified/active")
 
@@ -179,7 +179,7 @@ class ProductService:
         if not existing:
             return False
 
-        if existing.merchant_id is not None and existing.merchant_id != merchant_id:
+        if existing.merchant_principal_id is not None and existing.merchant_principal_id != merchant_principal_id:
             raise PermissionError("Product does not belong to this merchant")
 
         return self._product_repo.delete(product_id)
