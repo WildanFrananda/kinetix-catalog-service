@@ -1,3 +1,4 @@
+import logging
 from typing import Callable, Optional
 
 from django.http import HttpRequest, HttpResponse
@@ -10,6 +11,8 @@ from core.infrastructure.observability.request_id_context import (
 HEADER = "X-Request-Id"
 _META_KEY = "HTTP_X_REQUEST_ID"
 
+logger = logging.getLogger(__name__)
+
 
 class RequestIdMiddleware:
     def __init__(self, get_response: Callable[[HttpRequest], HttpResponse]) -> None:
@@ -21,6 +24,7 @@ class RequestIdMiddleware:
 
         try:
             response = self._get_response(request)
+            logger.info("%s %s -> %s", request.method, request.path, response.status_code)
         finally:
             reset_request_id(token)
 
