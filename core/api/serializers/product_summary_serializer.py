@@ -9,5 +9,6 @@ class ProductSummarySerializer(serializers.Serializer[Dict[str, Any]]):
     price = serializers.DecimalField(max_digits=12, decimal_places=2)
     currency = serializers.CharField()
     image_url = serializers.URLField()
-    available_stock = serializers.IntegerField()
-    is_in_stock = serializers.BooleanField()
+    available_stock = serializers.IntegerField(allow_null=True)
+    is_in_stock = serializers.BooleanField(allow_null=True)
+    stock_status = serializers.CharField()

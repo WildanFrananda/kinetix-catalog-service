@@ -7,6 +7,7 @@ from pricing.v1 import pricing_pb2, pricing_pb2_grpc
 
 from core.domain.repositories import PricingServicePort
 from core.infrastructure.grpc.money import from_money, to_money
+from core.infrastructure.grpc.pricing_unavailable import PricingUnavailable
 from core.infrastructure.grpc.required_env import required_env
 from core.infrastructure.security import channel_credentials
 from core.infrastructure.observability import request_id_metadata
@@ -66,34 +67,7 @@ class PricingGrpcClient(PricingServicePort):
                 ],
             }
         except Exception as exc:
-            logger.error(
-                "pricing did not answer (%s); prices below are the base prices with no discount "
-                "applied", exc
-            )
-            fallback_subtotal = Decimal("0")
-            fallback_items = []
-            for it in items:
-                base_p = Decimal(str(it.get("base_price", it.get("price", "0"))))
-                qty = int(it.get("quantity", 1))
-                line_t = base_p * Decimal(qty)
-                fallback_subtotal += line_t
-                fallback_items.append({
-                    "product_id": str(it.get("product_id", it.get("sku", ""))),
-                    "base_price": base_p,
-                    "final_unit_price": base_p,
-                    "quantity": qty,
-                    "line_total": line_t,
-                    "applied_flash_sale": None,
-                    "applied_discount": None,
-                })
-
-            return {
-                "success": False,
-                "subtotal": fallback_subtotal,
-                "total_discount": Decimal("0"),
-                "voucher_discount": Decimal("0"),
-                "final_total": fallback_subtotal,
-                "applied_voucher": None,
-                "items": fallback_items,
-                "error": f"Pricing service gRPC error: {exc}",
-            }
+            logger.error("pricing did not answer, so no price was produced: %s", exc)
+            raise PricingUnavailable(
+                "pricing could not be reached, so this cart was not priced"
+            ) from exc

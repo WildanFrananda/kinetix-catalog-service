@@ -5,7 +5,7 @@ from contextvars import copy_context
 from decimal import Decimal
 from core.domain.repositories import ProductRepository, BinStockServicePort
 from core.domain.repositories.identity_service_port import IdentityServicePort
-from core.domain.entities import Product, Category, StockInfo
+from core.domain.entities import Product, Category, StockInfo, StockStatus
 from core.application.dto import (
     ProductFilterDTO,
     ProductListResultDTO,
@@ -56,13 +56,14 @@ class ProductService:
                         stock_map[sku] = future.result()
                     except Exception as exc:
                         logger.warning(
-                            "bin stock lookup failed for %s; reporting it as unavailable: %s", sku, exc
+                            "bin stock lookup failed for %s; reporting it as unknown: %s", sku, exc
                         )
-                        stock_map[sku] = StockInfo(sku=sku, bin_location="Unavailable", available_quantity=0, reserved_quantity=0)
+                        stock_map[sku] = StockInfo.unknown(sku)
 
         summaries: List[ProductSummaryDTO] = []
         for p in paginated_products:
-            stock = stock_map.get(p.sku) or StockInfo(sku=p.sku, bin_location="Unavailable", available_quantity=0, reserved_quantity=0)
+            stock = stock_map.get(p.sku) or StockInfo.unknown(p.sku)
+            quantity = stock.available_quantity
             product_id = p.id or 0
             summaries.append(
                 ProductSummaryDTO(
@@ -73,8 +74,9 @@ class ProductService:
                     price=p.price,
                     currency=p.currency,
                     image_url=p.image_url,
-                    available_stock=stock.available_quantity,
-                    is_in_stock=stock.available_quantity > 0
+                    available_stock=quantity,
+                    is_in_stock=None if quantity is None else quantity > 0,
+                    stock_status=_status_of(stock)
                 )
             )
 
@@ -92,14 +94,16 @@ class ProductService:
 
         try:
             stock = self._bin_stock_port.get_bin_stock_info(sku, _merchant_principal_of(p))
-        except Exception:
-            stock = StockInfo(sku=sku, bin_location="Unavailable", available_quantity=0, reserved_quantity=0)
+        except Exception as exc:
+            logger.warning("bin stock lookup failed for %s; reporting it as unknown: %s", sku, exc)
+            stock = StockInfo.unknown(sku)
 
         warehouse = WarehouseStockDTO(
             sku=p.sku,
             bin_location=stock.bin_location,
             available_quantity=stock.available_quantity,
-            reserved_quantity=stock.reserved_quantity
+            reserved_quantity=stock.reserved_quantity,
+            stock_status=_status_of(stock)
         )
 
         product_id = p.id or 0
@@ -190,3 +194,11 @@ class ProductService:
 
 def _merchant_principal_of(product: object) -> str:
     return str(getattr(product, "merchant_principal_id", "") or "")
+
+def _status_of(stock: StockInfo) -> StockStatus:
+    """Three answers, not two: a missing quantity is not a quantity of zero."""
+    quantity = stock.available_quantity
+    if quantity is None:
+        return StockStatus.UNKNOWN
+
+    return StockStatus.IN_STOCK if quantity > 0 else StockStatus.OUT_OF_STOCK

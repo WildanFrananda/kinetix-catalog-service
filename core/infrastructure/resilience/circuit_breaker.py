@@ -1,7 +1,7 @@
 import logging
 import threading
 from time import monotonic
-from typing import Callable, TypeVar
+from typing import Callable, Optional, TypeVar
 
 from core.infrastructure.resilience.circuit_open_error import CircuitOpenError
 from core.infrastructure.resilience.circuit_state import CircuitState
@@ -10,6 +10,14 @@ from core.infrastructure.resilience.is_peer_fault import is_peer_fault
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
+
+
+def _classify(error: BaseException) -> Optional[bool]:
+    if not isinstance(error, Exception):
+        return None
+
+    return not is_peer_fault(error)
+
 
 class CircuitBreaker:
     def __init__(
@@ -42,15 +50,13 @@ class CircuitBreaker:
 
     def call(self, operation: Callable[[], T]) -> T:
         is_trial = self._admit()
-        healthy = True
         try:
             result = operation()
-        except Exception as error:
-            healthy = not is_peer_fault(error)
+        except BaseException as error:
+            self._settle(is_trial, healthy=_classify(error))
             raise
-        finally:
-            self._settle(is_trial, healthy=healthy)
 
+        self._settle(is_trial, healthy=True)
         return result
 
     def _admit(self) -> bool:
@@ -72,10 +78,13 @@ class CircuitBreaker:
 
             return False
 
-    def _settle(self, was_trial: bool, healthy: bool) -> None:
+    def _settle(self, was_trial: bool, healthy: Optional[bool]) -> None:
         with self._lock:
             if was_trial:
                 self._trial_in_flight = False
+
+            if healthy is None:
+                return
 
             if not healthy:
                 self._successes = 0

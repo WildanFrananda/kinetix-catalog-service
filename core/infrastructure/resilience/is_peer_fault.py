@@ -1,6 +1,6 @@
 import grpc
 
-_PEER_FAULT_CODES: frozenset[object] = frozenset(
+_PEER_FAULT_CODES: frozenset[grpc.StatusCode] = frozenset(
     {
         grpc.StatusCode.UNAVAILABLE,
         grpc.StatusCode.DEADLINE_EXCEEDED,

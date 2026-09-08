@@ -4,6 +4,7 @@ from typing import Any, Dict, Optional
 import grpc
 from identity.v1 import identity_pb2, identity_pb2_grpc
 
+from core.domain.errors import IdentityUnavailableError
 from core.domain.repositories.identity_service_port import IdentityServicePort
 from core.infrastructure.grpc.required_env import required_env
 from core.infrastructure.resilience import CircuitBreaker, CircuitOpenError
@@ -23,16 +24,6 @@ _STATUS_NAMES: Dict[int, str] = {
 
 
 class IdentityGrpcClient(IdentityServicePort):
-    """
-    Asks identity about a merchant, over the mesh.
-
-    This class used to answer by itself. It returned
-    `{"user_id": n, "store_name": f"Merchant Store #{n}", "status": "active"}` for any positive
-    integer and never opened a connection, so `create_product`'s check that a merchant is
-    verified passed for every caller — including a suspended one, and including an account
-    identity had never heard of. It read as a working authorization check in every log and test.
-    """
-
     def __init__(self, target_host: Optional[str] = None) -> None:
         self._target_host: str = target_host or required_env("IDENTITY_GRPC_URL")
         self._channel = grpc.secure_channel(self._target_host, channel_credentials())
@@ -50,13 +41,24 @@ class IdentityGrpcClient(IdentityServicePort):
             response = self._breaker.call(
                 lambda: self._stub.GetMerchantInfo(request, timeout=5, metadata=metadata)
             )
-        except (grpc.RpcError, CircuitOpenError) as error:
-            logger.error(
-                "identity did not answer for merchant %s (%s); treating the merchant as unverified",
+        except CircuitOpenError as circuit_open:
+            logger.debug(
+                "identity is not being called right now, so merchant %s is neither verified nor "
+                "unverified as far as this service knows",
                 merchant_principal_id,
-                error,
             )
-            return None
+            raise IdentityUnavailableError(
+                merchant_principal_id, str(circuit_open)
+            ) from circuit_open
+        except grpc.RpcError as rpc_error:
+            logger.error(
+                "identity did not answer about merchant %s; the request is refused as unknown, "
+                "not as unverified",
+                merchant_principal_id,
+            )
+            raise IdentityUnavailableError(
+                merchant_principal_id, f"gRPC GetMerchantInfo failed: {rpc_error.details()}"
+            ) from rpc_error
 
         if not response.found:
             return None

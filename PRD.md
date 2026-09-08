@@ -77,11 +77,17 @@ storefront/
       "currency": "IDR",
       "image_url": "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800",
       "available_stock": 25,
-      "is_in_stock": true
+      "is_in_stock": true,
+      "stock_status": "in_stock"
     }
   ]
 }
 ```
+
+`stock_status` is one of `in_stock`, `out_of_stock` or `unknown`. `unknown` means warehouse could
+not be reached for that SKU, and `available_stock` and `is_in_stock` are then `null` — the
+response never states a stock number this service did not obtain. A genuine sell-out is
+`"available_stock": 0, "is_in_stock": false, "stock_status": "out_of_stock"`.
 
 ---
 
@@ -102,10 +108,14 @@ storefront/
     "sku": "TSHIRT-BLK-M",
     "bin_location": "Bin A-04",
     "available_quantity": 25,
-    "reserved_quantity": 0
+    "reserved_quantity": 0,
+    "stock_status": "in_stock"
   }
 }
 ```
+
+When warehouse cannot be reached, `stock_status` is `unknown` and `bin_location`,
+`available_quantity` and `reserved_quantity` are all `null`.
 
 ---
 

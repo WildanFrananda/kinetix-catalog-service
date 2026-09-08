@@ -9,6 +9,20 @@ from rest_framework import status
 from core.api.di import get_product_service
 from core.api.serializers import ProductDetailSerializer, ProductListResponseSerializer
 from core.application.dto import ProductFilterDTO
+from core.domain.errors import IdentityUnavailableError
+
+def _identity_unavailable() -> Response:
+    return Response(
+        {
+            "error": "IDENTITY_UNAVAILABLE",
+            "message": (
+                "we could not check this merchant account right now, so the request was not "
+                "applied. Nothing was created, changed or deleted."
+            ),
+        },
+        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        headers={"Retry-After": "15"},
+    )
 
 class ProductView(APIView):
     authentication_classes = [IdentityTokenAuthentication]
@@ -61,6 +75,8 @@ class ProductView(APIView):
                 "price": str(product.price),
                 "is_active": product.is_active
             }, status=status.HTTP_201_CREATED)
+        except IdentityUnavailableError:
+            return _identity_unavailable()
         except PermissionError as pe:
             return Response({"error": str(pe)}, status=status.HTTP_403_FORBIDDEN)
         except ValueError as ve:
@@ -88,6 +104,8 @@ class ProductView(APIView):
                 "price": str(product.price),
                 "is_active": product.is_active
             }, status=status.HTTP_200_OK)
+        except IdentityUnavailableError:
+            return _identity_unavailable()
         except PermissionError as pe:
             return Response({"error": str(pe)}, status=status.HTTP_403_FORBIDDEN)
 
@@ -105,5 +123,7 @@ class ProductView(APIView):
             if not deleted:
                 return Response({"error": "Product not found"}, status=status.HTTP_404_NOT_FOUND)
             return Response(status=status.HTTP_204_NO_CONTENT)
+        except IdentityUnavailableError:
+            return _identity_unavailable()
         except PermissionError as pe:
             return Response({"error": str(pe)}, status=status.HTTP_403_FORBIDDEN)

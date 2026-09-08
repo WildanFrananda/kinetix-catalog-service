@@ -16,6 +16,14 @@ class PeerRefused(Exception):
     """Stands in for a NOT_FOUND RpcError: the peer answered, it just said no."""
 
 
+class ProcessGoingDown(BaseException):
+    """Deliberately not an Exception: a SystemExit-shaped unwind, which says nothing about the peer."""
+
+
+def _abort() -> None:
+    raise ProcessGoingDown()
+
+
 @pytest.fixture(autouse=True)
 def classify_fakes(monkeypatch: pytest.MonkeyPatch) -> None:
     """`is_peer_fault` needs real grpc types; these tests are about the state machine, not gRPC."""
@@ -115,6 +123,30 @@ def test_half_open_admits_exactly_one_caller() -> None:
 
     assert len(admitted) == 1
     assert outcomes.count(True) == 1
+
+
+def test_a_base_exception_is_not_recorded_as_a_success() -> None:
+    breaker = CircuitBreaker("peer", fail_max=2)
+    _fail(breaker, PeerDown())
+
+    with pytest.raises(ProcessGoingDown):
+        breaker.call(_abort)
+
+    _fail(breaker, PeerDown())
+
+    assert breaker.state is CircuitState.OPEN
+
+
+def test_a_base_exception_neither_closes_a_half_open_circuit_nor_wedges_it() -> None:
+    breaker = CircuitBreaker("peer", fail_max=1, reset_timeout=0.0, success_threshold=2)
+    _fail(breaker, PeerDown())
+
+    with pytest.raises(ProcessGoingDown):
+        breaker.call(_abort)
+
+    assert breaker.state is CircuitState.HALF_OPEN
+    # The trial slot has to have been freed, or nothing is ever admitted again.
+    assert breaker.call(lambda: "trial") == "trial"
 
 
 def test_the_lock_is_not_held_across_the_call() -> None:

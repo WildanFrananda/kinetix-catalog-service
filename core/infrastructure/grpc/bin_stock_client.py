@@ -31,12 +31,19 @@ class BinStockGrpcClient(BinStockServicePort):
             response = self._breaker.call(
                 lambda: self._stub.CheckBinStock(request, timeout=5.0, metadata=metadata)
             )
-        except (grpc.RpcError, CircuitOpenError) as error:
-            logger.warning("warehouse did not answer for %s (%s); stock reported as none", sku, error)
-            return _unknown_stock(sku)
+        except CircuitOpenError:
+            logger.debug("warehouse is not being called right now; stock for %s is unknown", sku)
+            return StockInfo.unknown(sku)
+        except grpc.RpcError as rpc_error:
+            logger.warning(
+                "warehouse did not answer for %s (%s); stock reported as unknown",
+                sku,
+                rpc_error.details(),
+            )
+            return StockInfo.unknown(sku)
 
         if not response.found:
-            return _unknown_stock(sku)
+            return _no_stock_record(sku)
 
         return StockInfo(
             sku=response.sku,
@@ -56,15 +63,33 @@ class BinStockGrpcClient(BinStockServicePort):
                 lambda: self._stub.CheckBinStock(request, timeout=5.0, metadata=metadata)
             )
         except CircuitOpenError as circuit_open:
-            return {"success": False, "error": str(circuit_open)}
+            return {
+                "success": False,
+                "unavailable": True,
+                "sent": False,
+                "error": f"warehouse is not being called right now, so it was not asked about "
+                f"{sku}: {circuit_open}",
+            }
         except grpc.RpcError as rpc_error:
-            return {"success": False, "error": f"gRPC CheckBinStock failed: {rpc_error.details()}"}
+            return {
+                "success": False,
+                "unavailable": True,
+                "sent": True,
+                "error": f"gRPC CheckBinStock failed: {rpc_error.details()}",
+            }
 
         if not response.found:
-            return {"success": False, "error": f"warehouse holds no stock record for {sku}"}
+            return {
+                "success": False,
+                "unavailable": False,
+                "sent": True,
+                "error": f"warehouse holds no stock record for {sku}",
+            }
 
         return {
             "success": True,
+            "unavailable": False,
+            "sent": True,
             "sku": response.sku,
             "product_name": response.product_name,
             "physical_stock": response.physical_stock,
@@ -91,27 +116,36 @@ class BinStockGrpcClient(BinStockServicePort):
             return {
                 "success": False,
                 "unavailable": True,
-                "error": f"warehouse is not being called right now, so no stock was reserved: {circuit_open}",
+                "sent": False,
+                "error": f"warehouse was not called, so no stock was reserved: {circuit_open}",
             }
         except grpc.RpcError as rpc_error:
             return {
                 "success": False,
                 "unavailable": True,
-                "error": f"warehouse is unreachable, so no stock was reserved: {rpc_error.details()}",
+                "sent": True,
+                "error": f"warehouse did not answer, so it is unknown whether the reservation "
+                f"was recorded: {rpc_error.details()}",
             }
 
         if response.HasField("error"):
             return {
                 "success": False,
-                "error": f"reservation refused ({response.error.error_code}): {response.error.message}",
+                "unavailable": False,
+                "sent": True,
+                "error": f"reservation refused ({response.error.error_code}): "
+                f"{response.error.message}",
             }
 
         return {
             "success": response.success,
+            "unavailable": False,
+            "sent": True,
             "bin_location": response.bin_location,
             "remaining_available": response.remaining_available,
         }
 
-def _unknown_stock(sku: str) -> StockInfo:
-    """What this service knows about a SKU warehouse cannot account for: nothing."""
+
+def _no_stock_record(sku: str) -> StockInfo:
+    """Warehouse answered and holds no record for the SKU: a real zero, not an outage."""
     return StockInfo(sku=sku, bin_location="", available_quantity=0, reserved_quantity=0)
