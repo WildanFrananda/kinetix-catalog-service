@@ -1,10 +1,11 @@
 import os
-import shutil
-from typing import Protocol
-
-from prometheus_client import multiprocess
 
 METRICS_DIR = os.environ.setdefault("PROMETHEUS_MULTIPROC_DIR", "/tmp/kinetix-catalog-metrics")
+
+import shutil  # noqa: E402
+from typing import Protocol  # noqa: E402
+
+from prometheus_client import multiprocess  # noqa: E402
 
 _LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
 

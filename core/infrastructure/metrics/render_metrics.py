@@ -17,7 +17,7 @@ def render_metrics() -> bytes:
 
     registry = CollectorRegistry()
     try:
-        multiprocess.MultiProcessCollector(
+        multiprocess.MultiProcessCollector(  # type: ignore[no-untyped-call]
             registry, path=multiprocess_dir
         )
         return generate_latest(registry)
