@@ -6,6 +6,8 @@ SERVICE_NAME = "kinetix-catalog-service"
 
 SERVICE_VERSION = os.environ.get("KINETIX_SERVICE_VERSION") or "unknown"
 
+BUILD_INFO_NAME = "kinetix_build_info"
+
 HTTP_REQUESTS_TOTAL = Counter(
     "kinetix_http_requests_total",
     "HTTP requests served, by method, matched route template and response status.",
@@ -25,7 +27,7 @@ GRPC_CLIENT_CALLS_TOTAL = Counter(
 )
 
 BUILD_INFO = Gauge(
-    "kinetix_build_info",
+    BUILD_INFO_NAME,
     "Always 1. The labels say which service and which build answered the scrape.",
     ["service", "version"],
     multiprocess_mode="max",
