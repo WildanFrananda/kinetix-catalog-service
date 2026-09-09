@@ -56,6 +56,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'core.infrastructure.observability.RequestIdMiddleware',
+    'core.infrastructure.metrics.HttpMetricsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -141,16 +142,16 @@ LOGGING = {
         },
     },
     'formatters': {
-        'kinetix': {
-            'format': '{asctime} {levelname} [{request_id}] {name}: {message}',
-            'style': '{',
+        'json': {
+            '()': 'core.infrastructure.observability.JsonLogFormatter',
         },
     },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
+            'stream': 'ext://sys.stdout',
             'filters': ['request_id'],
-            'formatter': 'kinetix',
+            'formatter': 'json',
         },
     },
     'root': {

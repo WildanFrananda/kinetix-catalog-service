@@ -16,6 +16,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# What kinetix_build_info reports. .dockerignore keeps .git out of the build context, so nothing
+# in here can work the answer out; a build that does not pass one gets "unknown", which is what
+# is true, rather than a version number that would read as a fact.
+ARG SERVICE_VERSION=unknown
+ENV KINETIX_SERVICE_VERSION=${SERVICE_VERSION}
+
 RUN useradd --system --uid 10001 --create-home --shell /usr/sbin/nologin kinetix \
     && chown -R kinetix:kinetix /app
 USER kinetix
@@ -26,4 +32,10 @@ EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=3 \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=4).status == 200 else 1)" || exit 1
 
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+# gunicorn, matching what kinetix-infrastructure/compose.yaml runs. `manage.py runserver` was
+# here, and it does not drain: SIGTERM kills it where it stands, mid-response. The flags are the
+# compose file's; gunicorn.conf.py in /app supplies graceful_timeout, the JSON log config and the
+# shared metrics directory whichever way this image is started.
+CMD ["gunicorn", "config.wsgi:application", \
+     "--bind=0.0.0.0:8000", "--workers=3", "--timeout=30", \
+     "--access-logfile=-", "--error-logfile=-"]

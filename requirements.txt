@@ -8,6 +8,7 @@ grpcio==1.83.0
 grpcio-tools==1.83.0
 protobuf==7.35.1
 psycopg[binary]==3.3.4
+prometheus_client==0.26.0
 mypy==1.18.2
 django-stubs==6.1.0
 djangorestframework-stubs==3.18.0

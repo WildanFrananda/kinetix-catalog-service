@@ -1,0 +1,2 @@
+class MetricsUnavailable(RuntimeError):
+    pass

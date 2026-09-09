@@ -7,17 +7,29 @@ from fulfillment.v1 import fulfillment_pb2, fulfillment_pb2_grpc
 from core.domain.entities.stock_info import StockInfo
 from core.domain.repositories import BinStockServicePort
 from core.infrastructure.grpc.required_env import required_env
+from core.infrastructure.metrics import (
+    GrpcClientMetricsInterceptor,
+    declare_grpc_client_calls,
+)
 from core.infrastructure.resilience import CircuitBreaker, CircuitOpenError
 from core.infrastructure.security import channel_credentials
 from core.infrastructure.observability import request_id_metadata
 
 logger = logging.getLogger(__name__)
 
+METRICS_PEER = "kinetix-warehouse-service"
+
+_SERVICE = fulfillment_pb2.DESCRIPTOR.services_by_name["BinStockService"]
+declare_grpc_client_calls(METRICS_PEER, _SERVICE, ["CheckBinStock", "ReserveStock"])
+
 
 class BinStockGrpcClient(BinStockServicePort):
     def __init__(self, target_host: Optional[str] = None) -> None:
         self._target_host: str = target_host or required_env("WAREHOUSE_GRPC_URL")
-        self._channel = grpc.secure_channel(self._target_host, channel_credentials())
+        self._channel = grpc.intercept_channel(
+            grpc.secure_channel(self._target_host, channel_credentials()),
+            GrpcClientMetricsInterceptor(METRICS_PEER),
+        )
         self._stub = fulfillment_pb2_grpc.BinStockServiceStub(self._channel)
         self._breaker = CircuitBreaker("warehouse-bin-stock")
 
@@ -147,5 +159,4 @@ class BinStockGrpcClient(BinStockServicePort):
 
 
 def _no_stock_record(sku: str) -> StockInfo:
-    """Warehouse answered and holds no record for the SKU: a real zero, not an outage."""
     return StockInfo(sku=sku, bin_location="", available_quantity=0, reserved_quantity=0)

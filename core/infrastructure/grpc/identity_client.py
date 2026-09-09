@@ -7,12 +7,21 @@ from identity.v1 import identity_pb2, identity_pb2_grpc
 from core.domain.errors import IdentityUnavailableError
 from core.domain.repositories.identity_service_port import IdentityServicePort
 from core.infrastructure.grpc.required_env import required_env
+from core.infrastructure.metrics import (
+    GrpcClientMetricsInterceptor,
+    declare_grpc_client_calls,
+)
 from core.infrastructure.resilience import CircuitBreaker, CircuitOpenError
 from core.infrastructure.security import channel_credentials
 from core.infrastructure.observability import request_id_metadata
 
 
 logger = logging.getLogger(__name__)
+
+METRICS_PEER = "kinetix-identity-service"
+
+_SERVICE = identity_pb2.DESCRIPTOR.services_by_name["IdentityService"]
+declare_grpc_client_calls(METRICS_PEER, _SERVICE, ["GetMerchantInfo"])
 
 _STATUS_NAMES: Dict[int, str] = {
     identity_pb2.MERCHANT_STATUS_UNSPECIFIED: "unspecified",
@@ -26,7 +35,10 @@ _STATUS_NAMES: Dict[int, str] = {
 class IdentityGrpcClient(IdentityServicePort):
     def __init__(self, target_host: Optional[str] = None) -> None:
         self._target_host: str = target_host or required_env("IDENTITY_GRPC_URL")
-        self._channel = grpc.secure_channel(self._target_host, channel_credentials())
+        self._channel = grpc.intercept_channel(
+            grpc.secure_channel(self._target_host, channel_credentials()),
+            GrpcClientMetricsInterceptor(METRICS_PEER),
+        )
         self._stub = identity_pb2_grpc.IdentityServiceStub(self._channel)
         self._breaker = CircuitBreaker("identity-merchant")
 
