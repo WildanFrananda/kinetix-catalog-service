@@ -17,9 +17,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # What kinetix_build_info reports. .dockerignore keeps .git out of the build context, so nothing
-# in here can work the answer out; a build that does not pass one gets "unknown", which is what
-# is true, rather than a version number that would read as a fact.
-ARG SERVICE_VERSION=unknown
+# in here can work the answer out from the repository's history; a build that passes nothing
+# falls back to the version this repository declares for itself, in ./VERSION.
+#
+# The default is EMPTY, not "unknown". An ARG defaulted to a word would set the environment
+# variable to that word, and the environment wins over the declared version — the fallback would
+# never be reached and every image would report "unknown" no matter what ./VERSION said.
+ARG SERVICE_VERSION=
 ENV KINETIX_SERVICE_VERSION=${SERVICE_VERSION}
 
 RUN useradd --system --uid 10001 --create-home --shell /usr/sbin/nologin kinetix \
