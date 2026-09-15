@@ -82,6 +82,24 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpq-dev
       - run: pip install -r requirements.txt
 
+      # The API tests go through the real DI, and `get_product_service()` constructs the warehouse and
+      # identity gRPC clients — which read the service certificate from KINETIX_PKI_DIR before any call is
+      # made. Without it every request 500s on "cannot read /pki/ca.pem" and the suite tests nothing.
+      #
+      # A self-signed throwaway, not the real PKI: nothing here connects to anything. WAREHOUSE_GRPC_URL
+      # points at port 1, so the lookups fail and the listing reports the stock it could not read as
+      # unknown — which is the behaviour these tests exist to hold in place. A real certificate would
+      # make the same run and would be a credential in CI for no gain.
+      - name: Issue a throwaway service certificate
+        run: |
+          pki="$RUNNER_TEMP/pki"
+          mkdir -p "$pki"
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -keyout "$pki/tls.key" -out "$pki/tls.crt" \
+            -subj "/CN=catalog.ci.invalid" -addext "subjectAltName=DNS:catalog.ci.invalid"
+          cp "$pki/tls.crt" "$pki/ca.pem"
+          echo "KINETIX_PKI_DIR=$pki" >> "$GITHUB_ENV"
+
       - name: Migrate an empty database
         run: python manage.py migrate --noinput
 
