@@ -1,7 +1,9 @@
 from django.db import migrations, models
+from django.db.backends.base.schema import BaseDatabaseSchemaEditor
+from django.db.migrations.state import StateApps
 
 
-def refuse_if_populated(apps, schema_editor):
+def refuse_if_populated(apps: StateApps, schema_editor: BaseDatabaseSchemaEditor) -> None:
     product = apps.get_model("core", "ProductModel")
     rows = product.objects.exclude(merchant_id=None).count()
     if rows:

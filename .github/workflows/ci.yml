@@ -66,6 +66,12 @@ jobs:
       DB_PASSWORD: ci-ephemeral-not-a-deployed-credential
       ALLOWED_HOSTS: localhost
       DEBUG: "False"
+      # These are read through required_env, which refuses a default on purpose — a service that silently
+      # dials "localhost:50051" is the failure this platform keeps finding. Port 1 listens nowhere, so a
+      # test that actually dials fails loudly instead of reaching something real.
+      WAREHOUSE_GRPC_URL: 127.0.0.1:1
+      PRICING_GRPC_URL: 127.0.0.1:1
+      IDENTITY_GRPC_URL: 127.0.0.1:1
 
     steps:
       - uses: actions/checkout@v6
