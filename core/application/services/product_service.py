@@ -74,6 +74,7 @@ class ProductService:
                     price=p.price,
                     currency=p.currency,
                     image_url=p.image_url,
+                    merchant_principal_id=_merchant_principal_of(p),
                     available_stock=quantity,
                     is_in_stock=None if quantity is None else quantity > 0,
                     stock_status=_status_of(stock)
@@ -116,6 +117,7 @@ class ProductService:
             price=p.price,
             currency=p.currency,
             image_url=p.image_url,
+            merchant_principal_id=_merchant_principal_of(p),
             warehouse_stock=warehouse
         )
 

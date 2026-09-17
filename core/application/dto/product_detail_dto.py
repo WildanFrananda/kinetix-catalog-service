@@ -12,4 +12,5 @@ class ProductDetailDTO:
     price: Decimal
     currency: str
     image_url: str
+    merchant_principal_id: str
     warehouse_stock: WarehouseStockDTO
