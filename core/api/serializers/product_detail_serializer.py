@@ -11,4 +11,5 @@ class ProductDetailSerializer(serializers.Serializer[Dict[str, Any]]):
     price = serializers.DecimalField(max_digits=12, decimal_places=2)
     currency = serializers.CharField()
     image_url = serializers.URLField()
+    merchant_principal_id = serializers.CharField()
     warehouse_stock = WarehouseStockSerializer()

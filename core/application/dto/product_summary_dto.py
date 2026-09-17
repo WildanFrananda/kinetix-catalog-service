@@ -13,6 +13,7 @@ class ProductSummaryDTO:
     price: Decimal
     currency: str
     image_url: str
+    merchant_principal_id: str
     available_stock: Optional[int]
     is_in_stock: Optional[bool]
     stock_status: StockStatus
