@@ -10,12 +10,19 @@
 
 ## 🎯 1. Objective & Scope
 
-The `storefront` microservice serves as the **Primary Public API Gateway** for client applications (Mobile App, Web Frontend). This document defines the **Product Catalog, Real-Time Warehouse Stock Query, and Cart Stock Reservation API**.
+This service owns **products, categories and search**. Nothing else.
+
+It is **not** the public API gateway — that is `kinetix-api-gateway`, which every client talks to and
+which routes `/api/v1/products` and `/api/v1/categories` here. It does **not** own checkout, orders,
+buyers or addresses: the order aggregate belongs to `kinetix-order-service` and the person behind it
+to `kinetix-identity-service`. An earlier version of this document said otherwise, and the code
+followed it — catalog carried an `orders` table with `buyer_name`, `buyer_phone`, `street_address`,
+`city` and `postal_code` until 2026-09-20. It is gone. (docs/BOUNDARY-DEBT.md C1, C5, C10)
 
 ### Key Objectives:
-1. **Public Catalog API**: Allow mobile and web clients to query products, categories, pricing, and live availability.
-2. **Real-Time Warehouse Stock Query via gRPC**: Check exact stock counts across warehouse bins (`fashion_fulfillment_oms` gRPC `BinStockService`) to prevent overselling.
-3. **Cart Stock Reservation**: Temporarily reserve bin stock when a buyer initiates checkout, ensuring stock integrity before final payment.
+1. **Product catalog API**: let clients query products and categories.
+2. **Real-time warehouse stock query via gRPC**: read stock counts from warehouse's `BinStockService`
+   so a listing does not advertise what is not on a shelf. Warehouse owns the stock; catalog reads it.
 
 ---
 
@@ -27,26 +34,26 @@ Following `AGENTS.md` guidelines, all modules strictly follow layer separation:
 storefront/
 └── core/
     ├── domain/
-    │   ├── entities.py           # Pure Python dataclasses: Product, Category, Order, StockInfo
-    │   └── repositories.py       # ProductRepository (ABC), OrderRepository (ABC), Ports (ABC)
+    │   ├── entities/             # One dataclass per file: Product, Category, Money, StockInfo, StockStatus
+    │   └── repositories/         # ProductRepository, CategoryRepository (ABCs)
     ├── application/
-    │   ├── dto.py                # All DTOs: ProductFilterDTO, CreateOrderInputDTO, ReserveCartStockInputDTO
-    │   └── services.py           # Unified ProductService & OrderService
+    │   ├── dto/                  # One DTO per file
+    │   └── services/             # ProductService, CategoryService
     ├── infrastructure/
-    │   ├── models.py             # CategoryModel, ProductModel, OrderModel, OrderItemModel (Django ORM)
-    │   ├── repositories.py       # DjangoProductRepository, DjangoOrderRepository
+    │   ├── models/               # CategoryModel, ProductModel (Django ORM) — and nothing else
+    │   ├── repositories/         # DjangoProductRepository, DjangoCategoryRepository
+    │   ├── security/             # IdentityTokenAuthentication, TokenVerifier, Principal, mTLS
     │   └── grpc/
-    │       ├── fulfillment_client.py # FulfillmentGrpcClient (Adapter to OMS port 50051)
-    │       └── bin_stock_client.py    # BinStockGrpcClient (Adapter to OMS port 50051)
+    │       └── bin_stock_client.py  # BinStockGrpcClient — reads warehouse stock
     ├── api/
-    │   ├── serializers.py        # Serializers
-    │   ├── views.py              # ProductListView, ProductDetailView, CheckoutView, ReserveStockView
-    │   └── di.py                 # get_product_service(), get_order_service()
+    │   ├── serializers/
+    │   ├── views/                # ProductView, CategoryView, HealthView, ReadinessView, MetricsView
+    │   └── di.py
     ├── tests/
     │   ├── unit/                 # Domain service unit tests
     │   ├── integration/          # Django ORM repository tests
     │   └── api/                  # End-to-End APIView tests
-    └── urls.py                   # Single consolidated routes: /api/products/, /api/orders/checkout/, /api/cart/reserve/
+    └── urls.py                   # /api/products/, /api/categories/ — no checkout, no orders
 ```
 
 
