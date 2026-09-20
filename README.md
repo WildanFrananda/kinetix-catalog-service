@@ -1,21 +1,32 @@
 # 🛒 Kinetix Catalog Service (`kinetix-catalog-service`)
 
-High-performance product catalog, search engine, inventory stock query, cart reservation, and checkout entrypoint microservice built with **Python 3.12+**, **Django 6.0+**, **gRPC Client Communication**, **PostgreSQL 16**, and **Strict Type Checking (mypy)** following **Hexagonal Architecture**.
+Products, categories and search, plus a live stock reading taken from warehouse over gRPC. Built with
+**Python**, **Django** + **DRF**, **PostgreSQL** and **strict typing (mypy)**, following hexagonal
+architecture.
+
+**Not** checkout, and **not** the public entrypoint. Orders belong to `kinetix-order-service`, the
+buyer behind them to `kinetix-identity-service`, and the single public door is
+`kinetix-api-gateway`.
 
 ---
 
-## 🏛️ Domain Architecture & Resolved Audit Upgrades
+## 🏛️ What this service does, and what it does not
 
-1. **Idempotency Key & Duplicate Order Protection**:
-   - `OrderService.checkout` locks and evaluates `idempotency_key` (extracted from `Idempotency-Key` or `X-Idempotency-Key` headers) in `OrderModel`. Retried requests return existing order details immediately without generating duplicate orders or gRPC calls.
-2. **Atomic Stock Reservation Guard**:
-   - Executes stock reservation checks (`bin_stock_port.reserve_stock()`) prior to saving orders in DB. Rejects checkout attempts with `ValueError` if available quantity is insufficient, eliminating overselling / negative inventory.
-3. **Saga Failure Compensation**:
-   - Implemented Saga compensation logic in `OrderService.checkout`. If gRPC `submit_fulfillment_order()` to `kinetix-warehouse-service` fails or returns active rejection, order status is automatically updated to `"failed"` in DB.
-4. **Fail-Fast Production Secret Key Validation**:
-   - `config/settings.py` enforces explicit `SECRET_KEY` presence in non-DEBUG environments, failing fast on missing environment variables.
-5. **Parallel gRPC Performance & Channel Reuse**:
-   - `ProductService.list_products` queries stock concurrently using `ThreadPoolExecutor`, while `BinStockGrpcClient` and `FulfillmentGrpcClient` reuse persistent gRPC channel connections across requests.
+**Does:** serve the product and category API; read live stock from warehouse's `BinStockService` over
+gRPC so a listing does not advertise what is not on a shelf; verify identity's access token on every
+authenticated request and resolve it to a `Principal`.
+
+**Does not:** hold a buyer, an address, an order, a price decision, or an account. Until 2026-09-20 it
+held an `orders` table with `buyer_name`, `buyer_phone`, `street_address`, `city` and `postal_code`,
+and `django.contrib.auth` gave it `auth_user` — a third place in this estate where someone could have
+a password. Both are gone. (docs/BOUNDARY-DEBT.md C1, C3, C5, C10)
+
+**Kept from the earlier audit work:**
+
+1. **Fail-fast secret validation**: `config/settings.py` demands an explicit `SECRET_KEY` of at least
+   32 characters outside DEBUG, failing at boot rather than serving with a default.
+2. **Parallel stock reads with channel reuse**: `ProductService.list_products` queries stock
+   concurrently, and `BinStockGrpcClient` reuses its gRPC channel across requests.
 
 ---
 
@@ -28,23 +39,25 @@ kinetix-catalog-service/
 │   │   ├── di.py                       # Dependency Injection Container
 │   │   ├── serializers/                # REST API Serializers
 │   │   └── views/                      # Clean REST Views
-│   │       ├── product_list_view.py
-│   │       ├── product_detail_view.py
-│   │       ├── checkout_view.py
-│   │       └── reserve_stock_view.py
+│   │       ├── product_view.py
+│   │       ├── category_view.py
+│   │       ├── health_view.py
+│   │       ├── readiness_view.py
+│   │       └── metrics_view.py
 │   ├── application/
 │   │   ├── dto/                        # Data Transfer Objects
-│   │   └── services/                   # Use Case Services (Product & Order)
+│   │   └── services/                   # Use Case Services (Product & Category)
 │   ├── domain/
 │   │   ├── entities/                   # Pure Domain Entities
 │   │   └── repositories/               # Repository Port Interfaces
 │   └── infrastructure/
-│       ├── models/                     # Django ORM Models
+│       ├── models/                     # Django ORM Models: CategoryModel, ProductModel
 │       ├── repositories/               # Django Repository Adapters
+│       ├── security/                   # Identity token verification, Principal, mTLS
 │       └── grpc/                       # gRPC Client Adapters (Channel Reuse)
-│           ├── bin_stock_client.py
-│           ├── fulfillment_client.py
-│           └── generated/              # Protobuf Generated Modules
+│           ├── bin_stock_client.py     # warehouse stock
+│           ├── pricing_client.py       # pricing
+│           └── identity_client.py
 ├── manage.py
 ├── pytest.ini
 └── requirements.txt
