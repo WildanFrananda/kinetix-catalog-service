@@ -15,10 +15,14 @@ class ProductModel(models.Model):
     category = models.ForeignKey(CategoryModel, related_name="products", on_delete=models.CASCADE)
     is_active = models.BooleanField(default=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "products"
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["updated_at", "sku"], name="products_changed_since_idx"),
+        ]
 
     def __str__(self) -> str:
         return f"{self.title} ({self.sku})"

@@ -1,18 +1,28 @@
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from decimal import Decimal
 from core.domain.entities import Product, Category
 from core.domain.repositories import ProductRepository
 from core.infrastructure.models import ProductModel, CategoryModel
 
 class DjangoProductRepository(ProductRepository):
-    def find_all(self, category_slug: Optional[str] = None, search_query: Optional[str] = None) -> List[Product]:
+    def find_page(
+        self,
+        category_slug: Optional[str] = None,
+        search_query: Optional[str] = None,
+        offset: int = 0,
+        limit: int = 10,
+    ) -> Tuple[List[Product], int]:
         qs = ProductModel.objects.select_related("category").filter(is_active=True)
         if category_slug:
             qs = qs.filter(category__slug=category_slug)
         if search_query:
             qs = qs.filter(title__icontains=search_query)
 
-        return [self._to_domain_entity(orm_p) for orm_p in qs]
+        total = qs.count()
+
+        page = [self._to_domain_entity(orm_p) for orm_p in qs[offset : offset + limit]]
+
+        return page, total
 
     def find_by_sku(self, sku: str) -> Optional[Product]:
         try:
