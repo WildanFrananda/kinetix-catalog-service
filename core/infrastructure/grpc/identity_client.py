@@ -6,13 +6,13 @@ from identity.v1 import identity_pb2, identity_pb2_grpc
 
 from core.domain.errors import IdentityUnavailableError
 from core.domain.repositories.identity_service_port import IdentityServicePort
+from core.infrastructure.grpc.mesh_channel import mesh_channel
 from core.infrastructure.grpc.required_env import required_env
 from core.infrastructure.metrics import (
     GrpcClientMetricsInterceptor,
     declare_grpc_client_calls,
 )
 from core.infrastructure.resilience import CircuitBreaker, CircuitOpenError
-from core.infrastructure.security import channel_credentials
 from core.infrastructure.observability import request_id_metadata
 
 
@@ -36,7 +36,7 @@ class IdentityGrpcClient(IdentityServicePort):
     def __init__(self, target_host: Optional[str] = None) -> None:
         self._target_host: str = target_host or required_env("IDENTITY_GRPC_URL")
         self._channel = grpc.intercept_channel(
-            grpc.secure_channel(self._target_host, channel_credentials()),
+            mesh_channel(self._target_host),
             GrpcClientMetricsInterceptor(METRICS_PEER),
         )
         self._stub = identity_pb2_grpc.IdentityServiceStub(self._channel)

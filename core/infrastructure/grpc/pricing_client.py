@@ -6,6 +6,7 @@ import grpc
 from pricing.v1 import pricing_pb2, pricing_pb2_grpc
 
 from core.domain.repositories import PricingServicePort
+from core.infrastructure.grpc.mesh_channel import mesh_channel
 from core.infrastructure.grpc.money import from_money, to_money
 from core.infrastructure.grpc.pricing_unavailable import PricingUnavailable
 from core.infrastructure.grpc.required_env import required_env
@@ -13,7 +14,6 @@ from core.infrastructure.metrics import (
     GrpcClientMetricsInterceptor,
     declare_grpc_client_calls,
 )
-from core.infrastructure.security import channel_credentials
 from core.infrastructure.observability import request_id_metadata
 
 
@@ -28,7 +28,7 @@ class PricingGrpcClient(PricingServicePort):
     def __init__(self, target_host: Optional[str] = None) -> None:
         self._target_host: str = target_host or required_env("PRICING_GRPC_URL")
         self._channel = grpc.intercept_channel(
-            grpc.secure_channel(self._target_host, channel_credentials()),
+            mesh_channel(self._target_host),
             GrpcClientMetricsInterceptor(METRICS_PEER),
         )
         self._stub = pricing_pb2_grpc.PricingServiceStub(self._channel)
