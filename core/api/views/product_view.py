@@ -24,6 +24,14 @@ def _identity_unavailable() -> Response:
         headers={"Retry-After": "15"},
     )
 
+def _seller(request: Request) -> Optional[Principal]:
+    return request.user if isinstance(request.user, Principal) else None
+
+def _unauthenticated() -> Response:
+    return Response(
+        {"error": "a verified access token is required"}, status=status.HTTP_401_UNAUTHORIZED
+    )
+
 class ProductView(APIView):
     authentication_classes = [IdentityTokenAuthentication]
     def get(self, request: Request, sku: Optional[str] = None) -> Response:
@@ -55,11 +63,9 @@ class ProductView(APIView):
         return Response(response_serializer.data, status=status.HTTP_200_OK)
 
     def post(self, request: Request) -> Response:
-        principal = request.user if isinstance(request.user, Principal) else None
+        principal = _seller(request)
         if principal is None:
-            return Response({"error": "a verified access token is required"}, status=status.HTTP_401_UNAUTHORIZED)
-        if principal.role not in ("seller", "admin"):
-            return Response({"error": "this account may not manage products"}, status=status.HTTP_403_FORBIDDEN)
+            return _unauthenticated()
         merchant_principal_id = principal.principal_id
 
         service = get_product_service()
@@ -83,11 +89,9 @@ class ProductView(APIView):
             return Response({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
 
     def put(self, request: Request, product_id: int) -> Response:
-        principal = request.user if isinstance(request.user, Principal) else None
+        principal = _seller(request)
         if principal is None:
-            return Response({"error": "a verified access token is required"}, status=status.HTTP_401_UNAUTHORIZED)
-        if principal.role not in ("seller", "admin"):
-            return Response({"error": "this account may not manage products"}, status=status.HTTP_403_FORBIDDEN)
+            return _unauthenticated()
         merchant_principal_id = principal.principal_id
 
         service = get_product_service()
@@ -110,11 +114,9 @@ class ProductView(APIView):
             return Response({"error": str(pe)}, status=status.HTTP_403_FORBIDDEN)
 
     def delete(self, request: Request, product_id: int) -> Response:
-        principal = request.user if isinstance(request.user, Principal) else None
+        principal = _seller(request)
         if principal is None:
-            return Response({"error": "a verified access token is required"}, status=status.HTTP_401_UNAUTHORIZED)
-        if principal.role not in ("seller", "admin"):
-            return Response({"error": "this account may not manage products"}, status=status.HTTP_403_FORBIDDEN)
+            return _unauthenticated()
         merchant_principal_id = principal.principal_id
 
         service = get_product_service()

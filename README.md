@@ -55,9 +55,9 @@ kinetix-catalog-service/
 │       ├── repositories/               # Django Repository Adapters
 │       ├── security/                   # Identity token verification, Principal, mTLS
 │       └── grpc/                       # gRPC Client Adapters (Channel Reuse)
-│           ├── bin_stock_client.py     # warehouse stock
-│           ├── pricing_client.py       # pricing
-│           └── identity_client.py
+│           ├── bin_stock_client.py     # warehouse stock (read only)
+│           ├── mesh_channel.py          # shared channel options for all three
+│           └── identity_client.py       # merchant standing and profile
 ├── manage.py
 ├── pytest.ini
 └── requirements.txt

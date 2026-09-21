@@ -66,12 +66,6 @@ jobs:
       DB_PASSWORD: ci-ephemeral-not-a-deployed-credential
       ALLOWED_HOSTS: localhost
       DEBUG: "False"
-      # These are read through required_env, which refuses a default on purpose — a service that silently
-      # dials "localhost:50051" is the failure this platform keeps finding. Port 1 listens nowhere, so a
-      # test that actually dials fails loudly instead of reaching something real.
-      WAREHOUSE_GRPC_URL: 127.0.0.1:1
-      PRICING_GRPC_URL: 127.0.0.1:1
-      IDENTITY_GRPC_URL: 127.0.0.1:1
 
     steps:
       - uses: actions/checkout@v6
@@ -82,23 +76,15 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpq-dev
       - run: pip install -r requirements.txt
 
-      # The API tests go through the real DI, and `get_product_service()` constructs the warehouse and
-      # identity gRPC clients — which read the service certificate from KINETIX_PKI_DIR before any call is
-      # made. Without it every request 500s on "cannot read /pki/ca.pem" and the suite tests nothing.
+      # No throwaway certificate here any more. The API tests used to go through the real DI, which
+      # builds both gRPC clients and reads this service's mTLS identity from KINETIX_PKI_DIR before any
+      # call is made — so CI had to issue a self-signed certificate for a run that connects to nothing,
+      # and the GitLab mirror, which never had that step, was red on the same commit.
       #
-      # A self-signed throwaway, not the real PKI: nothing here connects to anything. WAREHOUSE_GRPC_URL
-      # points at port 1, so the lookups fail and the listing reports the stock it could not read as
-      # unknown — which is the behaviour these tests exist to hold in place. A real certificate would
-      # make the same run and would be a credential in CI for no gain.
-      - name: Issue a throwaway service certificate
-        run: |
-          pki="$RUNNER_TEMP/pki"
-          mkdir -p "$pki"
-          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
-            -keyout "$pki/tls.key" -out "$pki/tls.crt" \
-            -subj "/CN=catalog.ci.invalid" -addext "subjectAltName=DNS:catalog.ci.invalid"
-          cp "$pki/tls.crt" "$pki/ca.pem"
-          echo "KINETIX_PKI_DIR=$pki" >> "$GITHUB_ENV"
+      # `core/tests/api/conftest.py` now fills the DI's client slots with the boundary stubs the unit
+      # tests already use, so nothing constructs a channel. Both platforms run the same suite with the
+      # same variables, and the unknown-stock path is asserted directly instead of by pointing a real
+      # client at a dead port.
 
       - name: Migrate an empty database
         run: python manage.py migrate --noinput
