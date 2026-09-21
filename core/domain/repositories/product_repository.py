@@ -1,12 +1,18 @@
 from abc import ABC, abstractmethod
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from core.domain.entities.product import Product
 from core.domain.entities.category import Category
 
 class ProductRepository(ABC):
     @abstractmethod
-    def find_all(self, category_slug: Optional[str] = None, search_query: Optional[str] = None) -> List[Product]:
-        pass
+    def find_page(
+        self,
+        category_slug: Optional[str] = None,
+        search_query: Optional[str] = None,
+        offset: int = 0,
+        limit: int = 10,
+    ) -> Tuple[List[Product], int]:
+        """One page of products, and how many match the filter in total."""
 
     @abstractmethod
     def find_by_sku(self, sku: str) -> Optional[Product]:

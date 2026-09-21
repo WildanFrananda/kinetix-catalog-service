@@ -28,15 +28,15 @@ class ProductService:
         self._identity_port = identity_port
 
     def list_products(self, filter_dto: ProductFilterDTO) -> ProductListResultDTO:
-        products = self._product_repo.find_all(
-            category_slug=filter_dto.category_slug,
-            search_query=filter_dto.search_query
-        )
+        page_number = max(filter_dto.page, 1)
+        offset = (page_number - 1) * filter_dto.page_size
 
-        total_count = len(products)
-        start_idx = (filter_dto.page - 1) * filter_dto.page_size
-        end_idx = start_idx + filter_dto.page_size
-        paginated_products = products[start_idx:end_idx]
+        paginated_products, total_count = self._product_repo.find_page(
+            category_slug=filter_dto.category_slug,
+            search_query=filter_dto.search_query,
+            offset=offset,
+            limit=filter_dto.page_size,
+        )
 
         stock_map: Dict[str, StockInfo] = {}
         if paginated_products:
@@ -83,7 +83,7 @@ class ProductService:
 
         return ProductListResultDTO(
             count=total_count,
-            page=filter_dto.page,
+            page=page_number,
             page_size=filter_dto.page_size,
             results=summaries
         )

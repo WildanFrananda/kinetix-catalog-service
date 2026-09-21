@@ -1,4 +1,4 @@
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
 from core.domain.entities import Product, Category
 from core.domain.repositories import ProductRepository
 
@@ -7,13 +7,21 @@ class FakeProductRepository(ProductRepository):
         self._store: Dict[str, Product] = {}
         self._categories: Dict[int, Category] = {}
 
-    def find_all(self, category_slug: Optional[str] = None, search_query: Optional[str] = None) -> List[Product]:
+    def find_page(
+        self,
+        category_slug: Optional[str] = None,
+        search_query: Optional[str] = None,
+        offset: int = 0,
+        limit: int = 10,
+    ) -> Tuple[List[Product], int]:
         res = [p for p in self._store.values() if p.is_active]
         if category_slug:
             res = [p for p in res if p.category.slug == category_slug]
         if search_query:
             res = [p for p in res if search_query.lower() in p.title.lower()]
-        return res
+
+        self.last_page_request = (offset, limit)
+        return res[offset : offset + limit], len(res)
 
     def find_by_sku(self, sku: str) -> Optional[Product]:
         p = self._store.get(sku)
