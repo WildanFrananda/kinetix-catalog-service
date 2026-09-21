@@ -121,11 +121,24 @@ class ProductService:
             warehouse_stock=warehouse
         )
 
+    def _selling_merchant(self, principal_id: str) -> str:
+        if not self._identity_port:
+            return principal_id
+
+        info = self._identity_port.get_merchant_info(principal_id)
+        if not info:
+            raise PermissionError("identity knows no merchant for this account")
+
+        if not info.get("may_sell"):
+            raise PermissionError(
+                f"identity does not permit this merchant to trade (standing: "
+                f"{info.get('status', 'unknown')})"
+            )
+
+        return str(info.get("merchant_principal_id") or principal_id)
+
     def create_product(self, merchant_principal_id: str, data: Dict[str, Any]) -> Product:
-        if self._identity_port:
-            info = self._identity_port.get_merchant_info(merchant_principal_id)
-            if not info or info.get("status") not in ["verified", "active"]:
-                raise PermissionError("Merchant account is not verified/active")
+        merchant_principal_id = self._selling_merchant(merchant_principal_id)
 
         cat = self._product_repo.find_category_by_id(int(data["category_id"]))
         if not cat:
@@ -146,10 +159,7 @@ class ProductService:
         return self._product_repo.save(product)
 
     def update_product(self, product_id: int, merchant_principal_id: str, data: Dict[str, Any]) -> Optional[Product]:
-        if self._identity_port:
-            info = self._identity_port.get_merchant_info(merchant_principal_id)
-            if not info or info.get("status") not in ["verified", "active"]:
-                raise PermissionError("Merchant account is not verified/active")
+        merchant_principal_id = self._selling_merchant(merchant_principal_id)
 
         existing = self._product_repo.find_by_id(product_id)
         if not existing:
@@ -180,10 +190,7 @@ class ProductService:
         return self._product_repo.save(updated)
 
     def delete_product(self, product_id: int, merchant_principal_id: str) -> bool:
-        if self._identity_port:
-            info = self._identity_port.get_merchant_info(merchant_principal_id)
-            if not info or info.get("status") not in ["verified", "active"]:
-                raise PermissionError("Merchant account is not verified/active")
+        merchant_principal_id = self._selling_merchant(merchant_principal_id)
 
         existing = self._product_repo.find_by_id(product_id)
         if not existing:

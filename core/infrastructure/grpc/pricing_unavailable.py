@@ -1,2 +1,0 @@
-class PricingUnavailable(RuntimeError):
-    pass

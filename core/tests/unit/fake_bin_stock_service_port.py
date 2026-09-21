@@ -1,5 +1,3 @@
-from typing import Any, Dict
-
 from core.domain.entities import StockInfo
 from core.domain.repositories import BinStockServicePort
 
@@ -17,12 +15,3 @@ class FakeBinStockServicePort(BinStockServicePort):
             reserved_quantity=2,
         )
 
-    def reserve_stock(self, sku: str, quantity: int, merchant_principal_id: str) -> Dict[str, Any]:
-        self.principals_seen.append(merchant_principal_id)
-        return {
-            "success": True,
-            "unavailable": False,
-            "sent": True,
-            "bin_location": "Bin A-04",
-            "remaining_available": 28,
-        }

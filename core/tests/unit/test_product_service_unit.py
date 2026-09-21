@@ -152,9 +152,19 @@ class TestProductServiceUnit:
                 "category_id": cat.id
             })
 
-    @pytest.mark.parametrize("merchant_status", ["pending", None])
+    @pytest.mark.parametrize(
+        "identity,expected",
+        [
+            (
+                FakeIdentityServicePort(status="pending", may_sell=False),
+                "does not permit this merchant to trade",
+            ),
+            (FakeIdentityServicePort(status=None), "knows no merchant"),
+        ],
+        ids=["identity says no", "identity has no such merchant"],
+    )
     def test_a_real_negative_from_identity_is_still_a_permission_error(
-        self, merchant_status: Optional[str]
+        self, identity: FakeIdentityServicePort, expected: str
     ) -> None:
         repo = FakeProductRepository()
         cat = repo.save_category(Category(id=None, name="Shoes", slug="shoes"))
@@ -162,16 +172,63 @@ class TestProductServiceUnit:
         service = ProductService(
             product_repo=repo,
             bin_stock_port=FakeBinStockServicePort(),
-            identity_port=FakeIdentityServicePort(status=merchant_status),
+            identity_port=identity,
         )
 
-        with pytest.raises(PermissionError, match="not verified/active"):
+        with pytest.raises(PermissionError, match=expected):
             service.create_product(merchant_principal_id="3c9a77b1-58de-4a01-8f2e-6d4b19c0a8f3", data={
                 "sku": "SHOES-RUN-42",
                 "title": "Running Shoes 42",
                 "price": "500000.00",
                 "category_id": cat.id
             })
+
+    def test_a_standing_catalog_never_heard_of_is_identitys_to_allow(self) -> None:
+        repo = FakeProductRepository()
+        cat = repo.save_category(Category(id=None, name="Shoes", slug="shoes"))
+
+        service = ProductService(
+            product_repo=repo,
+            bin_stock_port=FakeBinStockServicePort(),
+            identity_port=FakeIdentityServicePort(status="on_probation", may_sell=True),
+        )
+
+        product = service.create_product(
+            merchant_principal_id="3c9a77b1-58de-4a01-8f2e-6d4b19c0a8f3",
+            data={
+                "sku": "SHOES-RUN-42",
+                "title": "Running Shoes 42",
+                "price": "500000.00",
+                "category_id": cat.id,
+            },
+        )
+
+        assert product.id is not None
+
+    def test_the_tenant_key_is_the_merchant_identity_names_not_the_token_subject(self) -> None:
+        repo = FakeProductRepository()
+        cat = repo.save_category(Category(id=None, name="Shoes", slug="shoes"))
+        token_subject = "3c9a77b1-58de-4a01-8f2e-6d4b19c0a8f3"
+        merchant = "8a1f0c62-9d47-4b3e-b0a5-1e7c2f4d6b90"
+
+        service = ProductService(
+            product_repo=repo,
+            bin_stock_port=FakeBinStockServicePort(),
+            identity_port=FakeIdentityServicePort(merchant_principal_id=merchant),
+        )
+
+        product = service.create_product(
+            merchant_principal_id=token_subject,
+            data={
+                "sku": "SHOES-RUN-42",
+                "title": "Running Shoes 42",
+                "price": "500000.00",
+                "category_id": cat.id,
+            },
+        )
+
+        assert product.merchant_principal_id == merchant
+        assert product.merchant_principal_id != token_subject
 
     def test_identity_outage_blocks_update_and_delete_too(self) -> None:
         repo = FakeProductRepository()

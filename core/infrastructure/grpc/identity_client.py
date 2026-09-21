@@ -76,6 +76,7 @@ class IdentityGrpcClient(IdentityServicePort):
             return None
 
         return {
+            "may_sell": response.may_sell,
             "merchant_principal_id": response.merchant_principal_id,
             "store_name": response.store_name,
             "status": _STATUS_NAMES.get(response.status, "unspecified"),
