@@ -1,5 +1,6 @@
+from datetime import datetime
 from typing import Optional, List, Dict, Tuple
-from core.domain.entities import Product, Category
+from core.domain.entities import Product, Category, ProductChangePage
 from core.domain.repositories import ProductRepository
 
 class FakeProductRepository(ProductRepository):
@@ -22,6 +23,53 @@ class FakeProductRepository(ProductRepository):
 
         self.last_page_request = (offset, limit)
         return res[offset : offset + limit], len(res)
+
+    def find_changed_since(
+        self,
+        updated_through: Optional[datetime] = None,
+        last_sku: str = "",
+        limit: int = 100,
+    ) -> ProductChangePage:
+        self.last_changed_since_limit = limit
+
+        rows = sorted(
+            (p for p in self._store.values() if p.updated_at is not None),
+            key=lambda p: (p.updated_at, p.sku),
+        )
+        if updated_through is not None:
+            rows = [
+                p
+                for p in rows
+                if p.updated_at is not None
+                and (
+                    p.updated_at > updated_through
+                    or (p.updated_at == updated_through and p.sku > last_sku)
+                )
+            ]
+
+        has_more = len(rows) > limit
+        rows = rows[:limit]
+
+        upserted = [p for p in rows if p.is_active]
+        removed = [p.sku for p in rows if not p.is_active]
+
+        if rows:
+            next_updated_through = rows[-1].updated_at
+            next_last_sku = rows[-1].sku
+        else:
+            next_updated_through = updated_through
+            next_last_sku = last_sku
+
+        return ProductChangePage(
+            upserted=upserted,
+            removed_skus=removed,
+            next_updated_through=next_updated_through,
+            next_last_sku=next_last_sku,
+            has_more=has_more,
+        )
+
+    def count_active_products(self) -> int:
+        return len([p for p in self._store.values() if p.is_active])
 
     def find_by_sku(self, sku: str) -> Optional[Product]:
         p = self._store.get(sku)

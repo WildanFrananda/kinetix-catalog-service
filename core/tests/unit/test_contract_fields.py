@@ -1,5 +1,6 @@
 from typing import Set, Type
 
+from catalog.v1 import catalog_pb2
 from fulfillment.v1 import fulfillment_pb2
 from google.protobuf.message import Message
 from identity.v1 import identity_pb2
@@ -43,3 +44,38 @@ class TestContractFields:
     def test_catalog_asks_warehouse_nothing_else(self) -> None:
         rpcs = {name for name in dir(BinStockGrpcClient) if not name.startswith("_")}
         assert rpcs == {"get_bin_stock_info"}, rpcs
+
+
+class TestCatalogContractThisServiceServes:
+    def test_a_product_carries_what_a_read_model_needs(self) -> None:
+        assert {
+            "sku",
+            "merchant_principal_id",
+            "title",
+            "description",
+            "price",
+            "image_url",
+            "category_slug",
+            "category_name",
+            "updated_at",
+        } <= _fields(catalog_pb2.Product)
+
+    def test_price_is_the_shared_money_type(self) -> None:
+        field = catalog_pb2.Product.DESCRIPTOR.fields_by_name["price"]
+        assert field.message_type is not None
+        assert field.message_type.full_name == "common.v1.Money"
+        assert {"amount_minor", "currency"} <= {f.name for f in field.message_type.fields}
+
+    def test_the_cursor_has_both_halves(self) -> None:
+        assert {"updated_through", "last_sku"} <= _fields(catalog_pb2.Cursor)
+
+    def test_removals_are_explicit(self) -> None:
+        assert "removed_skus" in _fields(catalog_pb2.ChangedSinceResponse)
+        field = catalog_pb2.ChangedSinceResponse.DESCRIPTOR.fields_by_name["removed_skus"]
+        assert field.is_repeated
+
+    def test_the_service_still_offers_what_the_servicer_implements(self) -> None:
+        service = catalog_pb2.DESCRIPTOR.services_by_name["CatalogService"]
+        assert {"ChangedSince", "GetProduct", "CountProducts"} <= {
+            method.name for method in service.methods
+        }
