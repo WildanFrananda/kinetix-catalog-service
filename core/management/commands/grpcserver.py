@@ -12,6 +12,10 @@ from grpc_reflection.v1alpha import reflection
 
 from core.infrastructure.grpc.catalog_servicer import CatalogServicer
 from core.infrastructure.repositories import DjangoProductRepository
+from core.infrastructure.security.allowed_peers import allowed_peers
+from core.infrastructure.security.peer_authorization_interceptor import (
+    PeerAuthorizationInterceptor,
+)
 from core.infrastructure.security.server_credentials import server_credentials
 
 logger = logging.getLogger(__name__)
@@ -36,7 +40,12 @@ class Command(BaseCommand):
         port: int = options["port"]
         workers: int = options["workers"]
 
-        server = grpc.server(futures.ThreadPoolExecutor(max_workers=workers))
+        peers = allowed_peers()
+
+        server = grpc.server(
+            futures.ThreadPoolExecutor(max_workers=workers),
+            interceptors=[PeerAuthorizationInterceptor(peers)],
+        )
 
         catalog_pb2_grpc.add_CatalogServiceServicer_to_server(
             CatalogServicer(DjangoProductRepository()), server
@@ -66,7 +75,11 @@ class Command(BaseCommand):
             catalog_pb2.DESCRIPTOR.services_by_name["CatalogService"].full_name,
             health_pb2.HealthCheckResponse.SERVING,
         )
-        logger.info("catalog gRPC serving on %s with mTLS required", bound)
+        logger.info(
+            "catalog gRPC serving on %s with mTLS required; callers allowed: %s",
+            bound,
+            ",".join(sorted(peers)),
+        )
         self.stdout.write(self.style.SUCCESS(f"catalog.v1 listening on {bound} (mTLS)"))
 
         def stop(signum: int, _frame: Optional[FrameType]) -> None:
