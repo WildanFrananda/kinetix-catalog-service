@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Optional, List, Tuple
 from decimal import Decimal
 from django.db.models import Q
+from django.utils import timezone
 from core.domain.entities import Product, Category, ProductChangePage
 from core.domain.repositories import ProductRepository
 from core.infrastructure.models import ProductModel, CategoryModel
@@ -105,7 +106,9 @@ class DjangoProductRepository(ProductRepository):
         return self._to_domain_entity(orm_p)
 
     def delete(self, product_id: int) -> bool:
-        updated = ProductModel.objects.filter(id=product_id).update(is_active=False)
+        updated = ProductModel.objects.filter(id=product_id).update(
+            is_active=False, updated_at=timezone.now()
+        )
         return updated > 0
 
     def find_all_categories(self) -> List[Category]:
