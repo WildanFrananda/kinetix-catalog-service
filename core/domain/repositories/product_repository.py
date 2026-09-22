@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import Optional, List, Tuple
 from core.domain.entities.product import Product
+from core.domain.entities.product_change_page import ProductChangePage
 from core.domain.entities.category import Category
 
 class ProductRepository(ABC):
@@ -13,6 +15,19 @@ class ProductRepository(ABC):
         limit: int = 10,
     ) -> Tuple[List[Product], int]:
         """One page of products, and how many match the filter in total."""
+
+    @abstractmethod
+    def find_changed_since(
+        self,
+        updated_through: Optional[datetime] = None,
+        last_sku: str = "",
+        limit: int = 100,
+    ) -> ProductChangePage:
+        """Products whose record changed after the given position, oldest change first."""
+
+    @abstractmethod
+    def count_active_products(self) -> int:
+        """How many products are on sale."""
 
     @abstractmethod
     def find_by_sku(self, sku: str) -> Optional[Product]:

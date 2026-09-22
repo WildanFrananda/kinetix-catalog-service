@@ -19,3 +19,4 @@ class Product:
     is_active: bool = True
     stock_info: Optional[StockInfo] = None
     created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None

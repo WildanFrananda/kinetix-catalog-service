@@ -1,6 +1,8 @@
+from datetime import datetime
 from typing import Optional, List, Tuple
 from decimal import Decimal
-from core.domain.entities import Product, Category
+from django.db.models import Q
+from core.domain.entities import Product, Category, ProductChangePage
 from core.domain.repositories import ProductRepository
 from core.infrastructure.models import ProductModel, CategoryModel
 
@@ -23,6 +25,53 @@ class DjangoProductRepository(ProductRepository):
         page = [self._to_domain_entity(orm_p) for orm_p in qs[offset : offset + limit]]
 
         return page, total
+
+    def find_changed_since(
+        self,
+        updated_through: Optional[datetime] = None,
+        last_sku: str = "",
+        limit: int = 100,
+    ) -> ProductChangePage:
+        qs = ProductModel.objects.select_related("category")
+
+        if updated_through is not None:
+            qs = qs.filter(
+                Q(updated_at__gt=updated_through)
+                | (Q(updated_at=updated_through) & Q(sku__gt=last_sku))
+            )
+
+        qs = qs.order_by("updated_at", "sku")
+
+        rows = list(qs[: limit + 1])
+        has_more = len(rows) > limit
+        rows = rows[:limit]
+
+        upserted: List[Product] = []
+        removed_skus: List[str] = []
+        for row in rows:
+            if row.is_active:
+                upserted.append(self._to_domain_entity(row))
+            else:
+                removed_skus.append(row.sku)
+
+        if rows:
+            last = rows[-1]
+            next_updated_through: Optional[datetime] = last.updated_at
+            next_last_sku = last.sku
+        else:
+            next_updated_through = updated_through
+            next_last_sku = last_sku
+
+        return ProductChangePage(
+            upserted=upserted,
+            removed_skus=removed_skus,
+            next_updated_through=next_updated_through,
+            next_last_sku=next_last_sku,
+            has_more=has_more,
+        )
+
+    def count_active_products(self) -> int:
+        return ProductModel.objects.filter(is_active=True).count()
 
     def find_by_sku(self, sku: str) -> Optional[Product]:
         try:
@@ -98,5 +147,6 @@ class DjangoProductRepository(ProductRepository):
             category=category,
             merchant_principal_id=orm_p.merchant_principal_id,
             is_active=orm_p.is_active,
-            created_at=orm_p.created_at
+            created_at=orm_p.created_at,
+            updated_at=orm_p.updated_at,
         )
