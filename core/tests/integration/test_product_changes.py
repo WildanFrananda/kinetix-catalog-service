@@ -120,6 +120,28 @@ class TestTheCursorWalk:
         assert "SHOE-GONE" in page.removed_skus
         assert [p.sku for p in page.upserted] == [kept.sku]
 
+    def test_withdrawing_a_product_moves_its_timestamp(self) -> None:
+        repo = DjangoProductRepository()
+        cat = _category(repo)
+        _save(repo, cat, "SHOE-1")
+        _stamp("SHOE-1", NOON)
+
+        caught_up = repo.find_changed_since(limit=10)
+        assert caught_up.has_more is False
+
+        gone = repo.find_by_sku("SHOE-1")
+        assert gone is not None and gone.id is not None
+        repo.delete(gone.id)
+
+        after = repo.find_changed_since(
+            caught_up.next_updated_through, caught_up.next_last_sku, limit=10
+        )
+
+        assert after.removed_skus == ["SHOE-1"], (
+            "a queryset .update() does not fire auto_now, so a soft delete that forgets to set "
+            "updated_at is invisible to the cursor — and the product stays searchable for ever"
+        )
+
     def test_an_edited_product_comes_round_again(self) -> None:
         repo = DjangoProductRepository()
         cat = _category(repo)
