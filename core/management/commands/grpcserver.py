@@ -11,6 +11,9 @@ from grpc_health.v1 import health, health_pb2, health_pb2_grpc
 from grpc_reflection.v1alpha import reflection
 
 from core.infrastructure.grpc.catalog_servicer import CatalogServicer
+from core.infrastructure.grpc.database_connection_interceptor import (
+    DatabaseConnectionInterceptor,
+)
 from core.infrastructure.repositories import DjangoProductRepository
 from core.infrastructure.security.allowed_peers import allowed_peers
 from core.infrastructure.security.peer_authorization_interceptor import (
@@ -44,7 +47,10 @@ class Command(BaseCommand):
 
         server = grpc.server(
             futures.ThreadPoolExecutor(max_workers=workers),
-            interceptors=[PeerAuthorizationInterceptor(peers)],
+            interceptors=[
+                PeerAuthorizationInterceptor(peers),
+                DatabaseConnectionInterceptor(),
+            ],
         )
 
         catalog_pb2_grpc.add_CatalogServiceServicer_to_server(
