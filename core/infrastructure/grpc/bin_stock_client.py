@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import Dict, List, Optional, Sequence
 
 import grpc
 from fulfillment.v1 import fulfillment_pb2, fulfillment_pb2_grpc
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 METRICS_PEER = "kinetix-warehouse-service"
 
 _SERVICE = fulfillment_pb2.DESCRIPTOR.services_by_name["BinStockService"]
-declare_grpc_client_calls(METRICS_PEER, _SERVICE, ["CheckBinStock"])
+declare_grpc_client_calls(METRICS_PEER, _SERVICE, ["CheckBinStock", "CheckBinStockBatch"])
 
 
 class BinStockGrpcClient(BinStockServicePort):
@@ -63,6 +63,54 @@ class BinStockGrpcClient(BinStockServicePort):
             available_quantity=response.available_stock,
             reserved_quantity=response.allocated_stock,
         )
+
+
+    def get_bin_stock_for(
+        self, skus: Sequence[str], merchant_principal_id: str
+    ) -> Dict[str, StockInfo]:
+        wanted: List[str] = list(dict.fromkeys(skus))
+
+        if not wanted:
+            return {}
+
+        request = fulfillment_pb2.CheckBinStockBatchRequest(
+            merchant_principal_id=merchant_principal_id, skus=wanted
+        )
+        metadata = request_id_metadata()
+
+        try:
+            response = self._breaker.call(
+                lambda: self._stub.CheckBinStockBatch(request, timeout=5.0, metadata=metadata)
+            )
+        except CircuitOpenError:
+            logger.debug(
+                "warehouse is not being called right now; stock for %d skus is unknown",
+                len(wanted),
+            )
+            return {sku: StockInfo.unknown(sku) for sku in wanted}
+        except grpc.RpcError as rpc_error:
+            logger.warning(
+                "warehouse did not answer for %d skus (%s); stock reported as unknown",
+                len(wanted),
+                rpc_error.details(),
+            )
+            return {sku: StockInfo.unknown(sku) for sku in wanted}
+
+        answered = {
+            item.sku: (
+                StockInfo(
+                    sku=item.sku,
+                    bin_location=item.bin_location,
+                    available_quantity=item.available_stock,
+                    reserved_quantity=item.allocated_stock,
+                )
+                if item.found
+                else _no_stock_record(item.sku)
+            )
+            for item in response.items
+        }
+
+        return {sku: answered.get(sku, StockInfo.unknown(sku)) for sku in wanted}
 
 
 def _no_stock_record(sku: str) -> StockInfo:

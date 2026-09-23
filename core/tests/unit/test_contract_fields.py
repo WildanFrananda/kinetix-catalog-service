@@ -41,9 +41,15 @@ class TestContractFields:
             fulfillment_pb2.CheckBinStockResponse
         )
 
+    def test_batch_request_and_response(self) -> None:
+        assert {"merchant_principal_id", "skus"} <= _fields(
+            fulfillment_pb2.CheckBinStockBatchRequest
+        )
+        assert {"items"} <= _fields(fulfillment_pb2.CheckBinStockBatchResponse)
+
     def test_catalog_asks_warehouse_nothing_else(self) -> None:
         rpcs = {name for name in dir(BinStockGrpcClient) if not name.startswith("_")}
-        assert rpcs == {"get_bin_stock_info"}, rpcs
+        assert rpcs == {"get_bin_stock_info", "get_bin_stock_for"}, rpcs
 
 
 class TestCatalogContractThisServiceServes:

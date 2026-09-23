@@ -267,3 +267,59 @@ class TestProductServiceUnit:
 
         deleted = cat_service.delete_category(cat.id)
         assert deleted is True
+
+class TestStockIsAskedForOnce:
+    def _page_of(self, repo: FakeProductRepository, skus: list[str]) -> None:
+        cat = Category(id=1, name="Apparel", slug="apparel")
+        for sku in skus:
+            repo.save(
+                Product(
+                    id=None,
+                    sku=sku,
+                    title=f"Tee {sku}",
+                    description="Desc",
+                    price=Decimal("100.00"),
+                    currency="IDR",
+                    image_url="",
+                    category=cat,
+                )
+            )
+
+    def test_a_page_of_products_is_one_call(self) -> None:
+        repo = FakeProductRepository()
+        port = FakeBinStockServicePort()
+        self._page_of(repo, ["SKU-1", "SKU-2", "SKU-3"])
+
+        service = ProductService(product_repo=repo, bin_stock_port=port)
+        result = service.list_products(ProductFilterDTO(page=1, page_size=10))
+
+        assert len(result.results) == 3
+        assert len(port.batches_asked) == 1, (
+            "one call per merchant; a list of one-sku batches means the fan-out came back"
+        )
+        assert sorted(port.batches_asked[0]) == ["SKU-1", "SKU-2", "SKU-3"]
+
+    def test_an_empty_page_asks_nothing(self) -> None:
+        repo = FakeProductRepository()
+        port = FakeBinStockServicePort()
+
+        service = ProductService(product_repo=repo, bin_stock_port=port)
+        result = service.list_products(ProductFilterDTO(page=1, page_size=10))
+
+        assert result.count == 0
+        assert port.batches_asked == []
+
+    def test_a_warehouse_that_cannot_answer_leaves_stock_unknown(self) -> None:
+        repo = FakeProductRepository()
+        port = FakeUnreachableBinStockServicePort()
+        self._page_of(repo, ["SKU-1", "SKU-2"])
+
+        service = ProductService(product_repo=repo, bin_stock_port=port)
+        result = service.list_products(ProductFilterDTO(page=1, page_size=10))
+
+        for summary in result.results:
+            assert summary.available_stock is None, (
+                "an unanswered warehouse is not a shop with nothing in it"
+            )
+            assert summary.is_in_stock is None
+
