@@ -1,7 +1,5 @@
 from typing import List, Dict, Optional, Any
 import logging
-from concurrent.futures import ThreadPoolExecutor
-from contextvars import copy_context
 from decimal import Decimal
 from core.domain.repositories import ProductRepository, BinStockServicePort
 from core.domain.repositories.identity_service_port import IdentityServicePort
@@ -39,26 +37,23 @@ class ProductService:
         )
 
         stock_map: Dict[str, StockInfo] = {}
-        if paginated_products:
-            with ThreadPoolExecutor(max_workers=min(len(paginated_products), 10)) as executor:
-                futures = {
-                    executor.submit(
-                        copy_context().run,
-                        self._bin_stock_port.get_bin_stock_info,
-                        p.sku,
-                        _merchant_principal_of(p),
-                    ): p.sku
-                    for p in paginated_products
-                }
-                for future in futures:
-                    sku = futures[future]
-                    try:
-                        stock_map[sku] = future.result()
-                    except Exception as exc:
-                        logger.warning(
-                            "bin stock lookup failed for %s; reporting it as unknown: %s", sku, exc
-                        )
-                        stock_map[sku] = StockInfo.unknown(sku)
+        skus_by_merchant: Dict[str, List[str]] = {}
+        for p in paginated_products:
+            skus_by_merchant.setdefault(_merchant_principal_of(p), []).append(p.sku)
+
+        for merchant_principal_id, skus in skus_by_merchant.items():
+            try:
+                stock_map.update(
+                    self._bin_stock_port.get_bin_stock_for(skus, merchant_principal_id)
+                )
+            except Exception as exc:
+                logger.warning(
+                    "bin stock lookup failed for %d skus; reporting them as unknown: %s",
+                    len(skus),
+                    exc,
+                )
+                for sku in skus:
+                    stock_map.setdefault(sku, StockInfo.unknown(sku))
 
         summaries: List[ProductSummaryDTO] = []
         for p in paginated_products:
