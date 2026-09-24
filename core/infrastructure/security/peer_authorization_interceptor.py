@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import TYPE_CHECKING, Callable, FrozenSet, Iterator, Optional, Sequence, Tuple
 
 import grpc
@@ -8,6 +9,7 @@ import grpc
 logger = logging.getLogger(__name__)
 
 _SPIFFE_PREFIX = "spiffe://"
+_DEFAULT_TRUST_DOMAIN = "kinetix.local"
 _SERVICE_SEGMENT = "/service/"
 _SAN_KEY = "x509_subject_alternative_name"
 _OPEN_METHODS: Tuple[str, ...] = (
@@ -20,22 +22,35 @@ StreamBehavior = Callable[[object, grpc.ServicerContext], Iterator[object]]
 Handler = grpc.RpcMethodHandler
 
 
-def service_of(sans: Sequence[object]) -> Optional[str]:
+def trust_domains() -> Tuple[str, ...]:
+    configured = tuple(
+        value.strip()
+        for value in os.environ.get("KINETIX_TRUST_DOMAIN", "").split(",")
+        if value.strip()
+    )
+
+    return configured or (_DEFAULT_TRUST_DOMAIN,)
+
+
+def service_of(
+    sans: Sequence[object], domains: Optional[Sequence[str]] = None
+) -> Optional[str]:
+    accepted = tuple(domains) if domains is not None else trust_domains()
+    prefixes = tuple(
+        f"{_SPIFFE_PREFIX}{domain}{_SERVICE_SEGMENT}" for domain in accepted
+    )
+
     for san in sans:
         text = san.decode() if isinstance(san, bytes) else str(san)
 
-        if not text.startswith(_SPIFFE_PREFIX):
-            continue
+        for prefix in prefixes:
+            if not text.startswith(prefix):
+                continue
 
-        marker = text.find(_SERVICE_SEGMENT)
+            name = text[len(prefix) :]
 
-        if marker == -1:
-            continue
-
-        name = text[marker + len(_SERVICE_SEGMENT) :].strip("/")
-
-        if name:
-            return name
+            if name and "/" not in name:
+                return name
 
     return None
 
