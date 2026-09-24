@@ -9,6 +9,7 @@ from core.infrastructure.security.allowed_peers import allowed_peers
 from core.infrastructure.security.peer_authorization_interceptor import (
     PeerAuthorizationInterceptor,
     service_of,
+    trust_domains,
 )
 from core.infrastructure.security.service_identity_error import ServiceIdentityError
 
@@ -78,6 +79,46 @@ class TestServiceOf:
 
     def test_no_certificate_names_nobody(self) -> None:
         assert service_of([]) is None
+
+    def test_an_id_from_another_trust_domain_names_nobody(self) -> None:
+        foreign = b"spiffe://prod.kinetix/service/search"
+
+        assert service_of([foreign]) is None
+
+    def test_a_cutover_can_accept_both_domains_at_once(self) -> None:
+        both = ("kinetix.local", "prod.kinetix")
+
+        assert service_of([b"spiffe://prod.kinetix/service/search"], both) == "search"
+        assert service_of([spiffe("search")], both) == "search"
+
+    def test_a_domain_this_one_is_merely_a_prefix_of_is_refused(self) -> None:
+        assert service_of([b"spiffe://kinetix.local.example.com/service/search"]) is None
+
+    def test_a_path_is_not_a_service_name(self) -> None:
+        assert service_of([b"spiffe://kinetix.local/service/a/b"]) is None
+
+    def test_an_id_that_names_no_service_is_refused(self) -> None:
+        assert service_of([b"spiffe://kinetix.local/service/"]) is None
+        assert service_of([b"spiffe://kinetix.local/agent/search"]) is None
+
+
+class TestTrustDomains:
+    def test_an_unset_variable_is_the_domain_the_estate_runs_today(self) -> None:
+        assert trust_domains() == ("kinetix.local",)
+
+    def test_it_reads_a_comma_separated_list(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("KINETIX_TRUST_DOMAIN", "kinetix.local, prod.kinetix ")
+
+        assert trust_domains() == ("kinetix.local", "prod.kinetix")
+
+    def test_a_list_of_separators_falls_back_rather_than_accepting_nothing(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("KINETIX_TRUST_DOMAIN", " , , ")
+
+        assert trust_domains() == ("kinetix.local",)
 
 
 class TestPeerAuthorization:
