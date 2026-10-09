@@ -6,10 +6,11 @@ from core.infrastructure.security import IdentityTokenAuthentication, Principal
 from rest_framework.response import Response
 from rest_framework.request import Request
 from rest_framework import status
+from rest_framework.exceptions import MethodNotAllowed
 from core.api.di import get_product_service
 from core.api.serializers import ProductDetailSerializer, ProductListResponseSerializer
-from core.application.dto import ProductFilterDTO
-from core.domain.errors import IdentityUnavailableError
+from core.application.services import ProductFilterParser
+from core.domain.errors import IdentityUnavailableError, InvalidInputError, SkuTakenError
 
 def _identity_unavailable() -> Response:
     return Response(
@@ -27,6 +28,15 @@ def _identity_unavailable() -> Response:
 def _seller(request: Request) -> Optional[Principal]:
     return request.user if isinstance(request.user, Principal) else None
 
+def _invalid(error: InvalidInputError) -> Response:
+    return Response(
+        {"error": "INVALID_INPUT", "field": error.field, "message": error.reason},
+        status=status.HTTP_400_BAD_REQUEST,
+    )
+
+def _sku_taken(error: SkuTakenError) -> Response:
+    return Response({"error": "SKU_TAKEN", "message": str(error)}, status=status.HTTP_409_CONFLICT)
+
 def _unauthenticated() -> Response:
     return Response(
         {"error": "a verified access token is required"}, status=status.HTTP_401_UNAUTHORIZED
@@ -34,7 +44,9 @@ def _unauthenticated() -> Response:
 
 class ProductView(APIView):
     authentication_classes = [IdentityTokenAuthentication]
-    def get(self, request: Request, sku: Optional[str] = None) -> Response:
+    def get(self, request: Request, sku: Optional[str] = None, product_id: Optional[int] = None) -> Response:
+        if product_id is not None:
+            raise MethodNotAllowed("GET")
         service = get_product_service()
         if sku is not None:
             try:
@@ -46,23 +58,18 @@ class ProductView(APIView):
             except ValueError as e:
                 return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
 
-        category_slug = request.query_params.get("category")
-        search_query = request.query_params.get("q")
-        page = int(request.query_params.get("page", 1))
-        page_size = int(request.query_params.get("page_size", 10))
-
-        filter_dto = ProductFilterDTO(
-            category_slug=category_slug,
-            search_query=search_query,
-            page=page,
-            page_size=page_size
-        )
+        try:
+            filter_dto = ProductFilterParser.parse(request.query_params)
+        except InvalidInputError as invalid:
+            return _invalid(invalid)
 
         res = service.list_products(filter_dto)
         response_serializer = ProductListResponseSerializer(asdict(res))
         return Response(response_serializer.data, status=status.HTTP_200_OK)
 
-    def post(self, request: Request) -> Response:
+    def post(self, request: Request, sku: Optional[str] = None, product_id: Optional[int] = None) -> Response:
+        if sku is not None or product_id is not None:
+            raise MethodNotAllowed("POST")
         principal = _seller(request)
         if principal is None:
             return _unauthenticated()
@@ -85,10 +92,14 @@ class ProductView(APIView):
             return _identity_unavailable()
         except PermissionError as pe:
             return Response({"error": str(pe)}, status=status.HTTP_403_FORBIDDEN)
-        except ValueError as ve:
-            return Response({"error": str(ve)}, status=status.HTTP_400_BAD_REQUEST)
+        except InvalidInputError as invalid:
+            return _invalid(invalid)
+        except SkuTakenError as taken:
+            return _sku_taken(taken)
 
-    def put(self, request: Request, product_id: int) -> Response:
+    def put(self, request: Request, product_id: Optional[int] = None, sku: Optional[str] = None) -> Response:
+        if product_id is None:
+            raise MethodNotAllowed("PUT")
         principal = _seller(request)
         if principal is None:
             return _unauthenticated()
@@ -112,8 +123,14 @@ class ProductView(APIView):
             return _identity_unavailable()
         except PermissionError as pe:
             return Response({"error": str(pe)}, status=status.HTTP_403_FORBIDDEN)
+        except InvalidInputError as invalid:
+            return _invalid(invalid)
+        except SkuTakenError as taken:
+            return _sku_taken(taken)
 
-    def delete(self, request: Request, product_id: int) -> Response:
+    def delete(self, request: Request, product_id: Optional[int] = None, sku: Optional[str] = None) -> Response:
+        if product_id is None:
+            raise MethodNotAllowed("DELETE")
         principal = _seller(request)
         if principal is None:
             return _unauthenticated()

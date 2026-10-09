@@ -22,6 +22,7 @@ def _make_products(repo: DjangoProductRepository, how_many: int) -> Category:
                 currency="IDR",
                 image_url="",
                 category=cat,
+                merchant_principal_id="shop-1",
             )
         )
     return cat
@@ -118,6 +119,7 @@ class TestProductPagingHappensInTheDatabase:
                 currency="IDR",
                 image_url="",
                 category=cat,
+                merchant_principal_id="shop-1",
             )
         )
 

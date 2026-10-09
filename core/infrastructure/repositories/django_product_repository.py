@@ -1,9 +1,11 @@
 from datetime import datetime
 from typing import Optional, List, Tuple
 from decimal import Decimal
-from django.db.models import Q
+from django.db import IntegrityError, transaction
+from django.db.models import ProtectedError, Q
 from django.utils import timezone
 from core.domain.entities import Product, Category, ProductChangePage
+from core.domain.errors import CategoryInUseError, CategoryTakenError, SkuTakenError
 from core.domain.repositories import ProductRepository
 from core.infrastructure.models import ProductModel, CategoryModel
 
@@ -90,19 +92,26 @@ class DjangoProductRepository(ProductRepository):
 
     def save(self, product: Product) -> Product:
         category_orm = CategoryModel.objects.get(id=product.category.id)
-        orm_p, _ = ProductModel.objects.update_or_create(
-            sku=product.sku,
-            defaults={
-                "title": product.title,
-                "description": product.description,
-                "price": product.price,
-                "currency": product.currency,
-                "image_url": product.image_url,
-                "category": category_orm,
-                "merchant_principal_id": product.merchant_principal_id,
-                "is_active": product.is_active,
-            }
-        )
+        try:
+            with transaction.atomic():
+                if product.id is None:
+                    orm_p = ProductModel(sku=product.sku)
+                else:
+                    orm_p = ProductModel.objects.select_for_update().get(id=product.id)
+                    orm_p.sku = product.sku
+                orm_p.title = product.title
+                orm_p.description = product.description
+                orm_p.price = product.price
+                orm_p.currency = product.currency
+                orm_p.image_url = product.image_url
+                orm_p.category = category_orm
+                orm_p.merchant_principal_id = product.merchant_principal_id
+                orm_p.is_active = product.is_active
+                orm_p.save()
+        except IntegrityError as error:
+            if ProductModel.objects.filter(sku=product.sku).exclude(id=product.id).exists():
+                raise SkuTakenError(product.sku) from error
+            raise
         return self._to_domain_entity(orm_p)
 
     def delete(self, product_id: int) -> bool:
@@ -123,14 +132,27 @@ class DjangoProductRepository(ProductRepository):
             return None
 
     def save_category(self, category: Category) -> Category:
-        orm_c, _ = CategoryModel.objects.update_or_create(
-            slug=category.slug,
-            defaults={"name": category.name}
-        )
+        try:
+            with transaction.atomic():
+                if category.id is None:
+                    orm_c = CategoryModel(name=category.name, slug=category.slug)
+                else:
+                    orm_c = CategoryModel.objects.select_for_update().get(id=category.id)
+                    orm_c.name = category.name
+                    orm_c.slug = category.slug
+                orm_c.save()
+        except IntegrityError as error:
+            raise CategoryTakenError(category.name, category.slug) from error
         return Category(id=orm_c.id, name=orm_c.name, slug=orm_c.slug)
 
     def delete_category(self, category_id: int) -> bool:
-        count, _ = CategoryModel.objects.filter(id=category_id).delete()
+        in_use = ProductModel.objects.filter(category_id=category_id).count()
+        if in_use:
+            raise CategoryInUseError(category_id, in_use)
+        try:
+            count, _ = CategoryModel.objects.filter(id=category_id).delete()
+        except ProtectedError as error:
+            raise CategoryInUseError(category_id, len(error.protected_objects)) from error
         return count > 0
 
     def _to_domain_entity(self, orm_p: ProductModel) -> Product:
