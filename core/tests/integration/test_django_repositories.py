@@ -18,7 +18,8 @@ class TestDjangoRepositoriesIntegration:
             price=Decimal("750000.00"),
             currency="IDR",
             image_url="",
-            category=cat
+            category=cat,
+            merchant_principal_id="shop-1",
         )
 
         saved = repo.save(product)

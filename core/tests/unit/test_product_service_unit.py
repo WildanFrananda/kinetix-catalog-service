@@ -21,7 +21,7 @@ class TestProductServiceUnit:
         cat = Category(id=1, name="Apparel", slug="apparel")
         repo.save(Product(id=None, sku="SKU-1", title="Tee 1", description="Desc", price=Decimal("100.00"), currency="IDR", image_url="", category=cat))
 
-        service = ProductService(product_repo=repo, bin_stock_port=port)
+        service = ProductService(product_repo=repo, bin_stock_port=port, identity_port=FakeIdentityServicePort())
         res = service.list_products(ProductFilterDTO(page=1, page_size=10))
 
         assert res.count == 1
@@ -34,7 +34,7 @@ class TestProductServiceUnit:
         cat = Category(id=1, name="Apparel", slug="apparel")
         repo.save(Product(id=None, sku="SKU-1", title="Tee 1", description="Desc", price=Decimal("100.00"), currency="IDR", image_url="", category=cat))
 
-        service = ProductService(product_repo=repo, bin_stock_port=port)
+        service = ProductService(product_repo=repo, bin_stock_port=port, identity_port=FakeIdentityServicePort())
         detail = service.get_product_detail("SKU-1")
 
         assert detail is not None
@@ -47,7 +47,7 @@ class TestProductServiceUnit:
 
         cat = repo.save_category(Category(id=None, name="Shoes", slug="shoes"))
 
-        service = ProductService(product_repo=repo, bin_stock_port=port)
+        service = ProductService(product_repo=repo, bin_stock_port=port, identity_port=FakeIdentityServicePort())
         product = service.create_product(merchant_principal_id="3c9a77b1-58de-4a01-8f2e-6d4b19c0a8f3", data={
             "sku": "SHOES-RUN-42",
             "title": "Running Shoes 42",
@@ -65,7 +65,7 @@ class TestProductServiceUnit:
         port = FakeBinStockServicePort()
         cat = repo.save_category(Category(id=1, name="Shoes", slug="shoes"))
 
-        service = ProductService(product_repo=repo, bin_stock_port=port)
+        service = ProductService(product_repo=repo, bin_stock_port=port, identity_port=FakeIdentityServicePort())
         p = service.create_product(merchant_principal_id="3c9a77b1-58de-4a01-8f2e-6d4b19c0a8f3", data={
             "sku": "SHOES-50",
             "title": "Merchant 50 Product",
@@ -82,7 +82,7 @@ class TestProductServiceUnit:
         port = FakeBinStockServicePort()
         cat = repo.save_category(Category(id=1, name="Shoes", slug="shoes"))
 
-        service = ProductService(product_repo=repo, bin_stock_port=port)
+        service = ProductService(product_repo=repo, bin_stock_port=port, identity_port=FakeIdentityServicePort())
         p = service.create_product(merchant_principal_id="3c9a77b1-58de-4a01-8f2e-6d4b19c0a8f3", data={
             "sku": "SHOES-50",
             "title": "Merchant 50 Product",
@@ -100,7 +100,7 @@ class TestProductServiceUnit:
         cat = Category(id=1, name="Apparel", slug="apparel")
         repo.save(Product(id=None, sku="SKU-1", title="Tee 1", description="Desc", price=Decimal("100.00"), currency="IDR", image_url="", category=cat))
 
-        service = ProductService(product_repo=repo, bin_stock_port=FakeUnreachableBinStockServicePort())
+        service = ProductService(product_repo=repo, bin_stock_port=FakeUnreachableBinStockServicePort(), identity_port=FakeIdentityServicePort())
         summary = service.list_products(ProductFilterDTO(page=1, page_size=10)).results[0]
 
         assert summary.available_stock is None
@@ -112,7 +112,7 @@ class TestProductServiceUnit:
         cat = Category(id=1, name="Apparel", slug="apparel")
         repo.save(Product(id=None, sku="SKU-1", title="Tee 1", description="Desc", price=Decimal("100.00"), currency="IDR", image_url="", category=cat))
 
-        service = ProductService(product_repo=repo, bin_stock_port=FakeUnreachableBinStockServicePort())
+        service = ProductService(product_repo=repo, bin_stock_port=FakeUnreachableBinStockServicePort(), identity_port=FakeIdentityServicePort())
         detail = service.get_product_detail("SKU-1")
 
         assert detail is not None
@@ -126,7 +126,7 @@ class TestProductServiceUnit:
         cat = Category(id=1, name="Apparel", slug="apparel")
         repo.save(Product(id=None, sku="SKU-1", title="Tee 1", description="Desc", price=Decimal("100.00"), currency="IDR", image_url="", category=cat))
 
-        service = ProductService(product_repo=repo, bin_stock_port=FakeBinStockServicePort(available_quantity=0))
+        service = ProductService(product_repo=repo, bin_stock_port=FakeBinStockServicePort(available_quantity=0), identity_port=FakeIdentityServicePort())
         summary = service.list_products(ProductFilterDTO(page=1, page_size=10)).results[0]
 
         assert summary.available_stock == 0
@@ -233,7 +233,7 @@ class TestProductServiceUnit:
     def test_identity_outage_blocks_update_and_delete_too(self) -> None:
         repo = FakeProductRepository()
         cat = repo.save_category(Category(id=1, name="Shoes", slug="shoes"))
-        service = ProductService(product_repo=repo, bin_stock_port=FakeBinStockServicePort())
+        service = ProductService(product_repo=repo, bin_stock_port=FakeBinStockServicePort(), identity_port=FakeIdentityServicePort())
         created = service.create_product(merchant_principal_id="3c9a77b1-58de-4a01-8f2e-6d4b19c0a8f3", data={
             "sku": "SHOES-50",
             "title": "Merchant 50 Product",
@@ -290,7 +290,7 @@ class TestStockIsAskedForOnce:
         port = FakeBinStockServicePort()
         self._page_of(repo, ["SKU-1", "SKU-2", "SKU-3"])
 
-        service = ProductService(product_repo=repo, bin_stock_port=port)
+        service = ProductService(product_repo=repo, bin_stock_port=port, identity_port=FakeIdentityServicePort())
         result = service.list_products(ProductFilterDTO(page=1, page_size=10))
 
         assert len(result.results) == 3
@@ -303,7 +303,7 @@ class TestStockIsAskedForOnce:
         repo = FakeProductRepository()
         port = FakeBinStockServicePort()
 
-        service = ProductService(product_repo=repo, bin_stock_port=port)
+        service = ProductService(product_repo=repo, bin_stock_port=port, identity_port=FakeIdentityServicePort())
         result = service.list_products(ProductFilterDTO(page=1, page_size=10))
 
         assert result.count == 0
@@ -314,7 +314,7 @@ class TestStockIsAskedForOnce:
         port = FakeUnreachableBinStockServicePort()
         self._page_of(repo, ["SKU-1", "SKU-2"])
 
-        service = ProductService(product_repo=repo, bin_stock_port=port)
+        service = ProductService(product_repo=repo, bin_stock_port=port, identity_port=FakeIdentityServicePort())
         result = service.list_products(ProductFilterDTO(page=1, page_size=10))
 
         for summary in result.results:

@@ -4,7 +4,14 @@ from rest_framework.response import Response
 from rest_framework.request import Request
 from rest_framework import status
 from core.api.di import get_category_service
+from core.domain.errors import CategoryInUseError, CategoryTakenError, InvalidInputError
 from core.infrastructure.security import IdentityTokenAuthentication, Principal
+
+def _invalid(error: InvalidInputError) -> Response:
+    return Response(
+        {"error": "INVALID_INPUT", "field": error.field, "message": error.reason},
+        status=status.HTTP_400_BAD_REQUEST,
+    )
 
 class CategoryView(APIView):
     authentication_classes = [IdentityTokenAuthentication]
@@ -43,9 +50,12 @@ class CategoryView(APIView):
         body: Dict[str, Any] = request.data if isinstance(request.data, dict) else {}
         name = str(body.get("name", ""))
         slug = str(body.get("slug", ""))
-        if not name or not slug:
-            return Response({"error": "name and slug are required"}, status=status.HTTP_400_BAD_REQUEST)
-        category = service.create_category(name=name, slug=slug)
+        try:
+            category = service.create_category(name=name, slug=slug)
+        except InvalidInputError as invalid:
+            return _invalid(invalid)
+        except CategoryTakenError as taken:
+            return Response({"error": "CATEGORY_TAKEN", "message": str(taken)}, status=status.HTTP_409_CONFLICT)
         return Response({"id": category.id, "name": category.name, "slug": category.slug}, status=status.HTTP_201_CREATED)
 
     def put(self, request: Request, category_id: int) -> Response:
@@ -56,7 +66,12 @@ class CategoryView(APIView):
         body: Dict[str, Any] = request.data if isinstance(request.data, dict) else {}
         name = str(body.get("name", ""))
         slug = str(body.get("slug", ""))
-        category = service.update_category(category_id=category_id, name=name, slug=slug)
+        try:
+            category = service.update_category(category_id=category_id, name=name, slug=slug)
+        except InvalidInputError as invalid:
+            return _invalid(invalid)
+        except CategoryTakenError as taken:
+            return Response({"error": "CATEGORY_TAKEN", "message": str(taken)}, status=status.HTTP_409_CONFLICT)
         if not category:
             return Response({"error": "Category not found"}, status=status.HTTP_404_NOT_FOUND)
         return Response({"id": category.id, "name": category.name, "slug": category.slug}, status=status.HTTP_200_OK)
@@ -66,7 +81,13 @@ class CategoryView(APIView):
         if denied is not None:
             return denied
         service = get_category_service()
-        deleted = service.delete_category(category_id)
+        try:
+            deleted = service.delete_category(category_id)
+        except CategoryInUseError as in_use:
+            return Response(
+                {"error": "CATEGORY_IN_USE", "message": str(in_use), "product_count": in_use.product_count},
+                status=status.HTTP_409_CONFLICT,
+            )
         if not deleted:
             return Response({"error": "Category not found"}, status=status.HTTP_404_NOT_FOUND)
         return Response(status=status.HTTP_204_NO_CONTENT)

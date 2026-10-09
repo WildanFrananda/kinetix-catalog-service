@@ -1,12 +1,15 @@
 from datetime import datetime
 from typing import Optional, List, Dict, Tuple
+from dataclasses import replace
 from core.domain.entities import Product, Category, ProductChangePage
+from core.domain.errors import CategoryInUseError, CategoryTakenError, SkuTakenError
 from core.domain.repositories import ProductRepository
 
 class FakeProductRepository(ProductRepository):
     def __init__(self) -> None:
         self._store: Dict[str, Product] = {}
         self._categories: Dict[int, Category] = {}
+        self._next_id = 1
 
     def find_page(
         self,
@@ -82,20 +85,21 @@ class FakeProductRepository(ProductRepository):
         return None
 
     def save(self, product: Product) -> Product:
-        p_id = product.id or (len(self._store) + 1)
-        saved = Product(
-            id=p_id,
-            sku=product.sku,
-            title=product.title,
-            description=product.description,
-            price=product.price,
-            currency=product.currency,
-            image_url=product.image_url,
-            category=product.category,
-            merchant_principal_id=product.merchant_principal_id,
-            is_active=product.is_active
-        )
-        self._store[product.sku] = saved
+        holder = self._store.get(product.sku)
+        if holder is not None and holder.id != product.id:
+            raise SkuTakenError(product.sku)
+
+        if product.id is None:
+            saved = replace(product, id=self._next_id, stock_info=None)
+            self._next_id += 1
+        else:
+            current = self.find_by_id(product.id)
+            if current is None:
+                raise LookupError(f"no product {product.id} to update")
+            del self._store[current.sku]
+            saved = replace(product, stock_info=None)
+
+        self._store[saved.sku] = saved
         return saved
 
     def delete(self, product_id: int) -> bool:
@@ -123,12 +127,20 @@ class FakeProductRepository(ProductRepository):
         return self._categories.get(category_id)
 
     def save_category(self, category: Category) -> Category:
-        c_id = category.id or (len(self._categories) + 1)
+        """A category with an id the fake has never seen is filed under that id, as a fixture."""
+        for other in self._categories.values():
+            if other.id != category.id and (other.name == category.name or other.slug == category.slug):
+                raise CategoryTakenError(category.name, category.slug)
+
+        c_id = category.id or (max(self._categories, default=0) + 1)
         saved = Category(id=c_id, name=category.name, slug=category.slug)
         self._categories[c_id] = saved
         return saved
 
     def delete_category(self, category_id: int) -> bool:
+        in_use = [p for p in self._store.values() if p.category.id == category_id]
+        if in_use:
+            raise CategoryInUseError(category_id, len(in_use))
         if category_id in self._categories:
             del self._categories[category_id]
             return True

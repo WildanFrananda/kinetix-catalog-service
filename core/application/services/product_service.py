@@ -1,9 +1,10 @@
 from typing import List, Dict, Optional, Any
 import logging
-from decimal import Decimal
 from core.domain.repositories import ProductRepository, BinStockServicePort
 from core.domain.repositories.identity_service_port import IdentityServicePort
+from core.application.services.product_field_parser import ProductFieldParser
 from core.domain.entities import Product, Category, StockInfo, StockStatus
+from core.domain.errors import InvalidInputError
 from core.application.dto import (
     ProductFilterDTO,
     ProductListResultDTO,
@@ -19,7 +20,7 @@ class ProductService:
         self,
         product_repo: ProductRepository,
         bin_stock_port: BinStockServicePort,
-        identity_port: Optional[IdentityServicePort] = None
+        identity_port: IdentityServicePort,
     ) -> None:
         self._product_repo = product_repo
         self._bin_stock_port = bin_stock_port
@@ -117,9 +118,6 @@ class ProductService:
         )
 
     def _selling_merchant(self, principal_id: str) -> str:
-        if not self._identity_port:
-            return principal_id
-
         info = self._identity_port.get_merchant_info(principal_id)
         if not info:
             raise PermissionError("identity knows no merchant for this account")
@@ -135,19 +133,16 @@ class ProductService:
     def create_product(self, merchant_principal_id: str, data: Dict[str, Any]) -> Product:
         merchant_principal_id = self._selling_merchant(merchant_principal_id)
 
-        cat = self._product_repo.find_category_by_id(int(data["category_id"]))
-        if not cat:
-            raise ValueError(f"Category {data['category_id']} not found")
-
+        fields = ProductFieldParser
         product = Product(
             id=None,
-            sku=str(data["sku"]),
-            title=str(data["title"]),
-            description=str(data.get("description", "")),
-            price=Decimal(str(data["price"])),
-            currency=str(data.get("currency", "IDR")),
-            image_url=str(data.get("image_url", "")),
-            category=cat,
+            sku=fields.sku(data.get("sku")),
+            title=fields.title(data.get("title")),
+            description=fields.description(data.get("description")),
+            price=fields.price(data.get("price")),
+            currency=fields.currency(data.get("currency")),
+            image_url=fields.image_url(data.get("image_url")),
+            category=self._category(fields.category_id(data.get("category_id"))),
             merchant_principal_id=merchant_principal_id,
             is_active=True
         )
@@ -160,27 +155,27 @@ class ProductService:
         if not existing:
             return None
 
-        if existing.merchant_principal_id is not None and existing.merchant_principal_id != merchant_principal_id:
+        if existing.merchant_principal_id != merchant_principal_id:
             raise PermissionError("Product does not belong to this merchant")
 
-        category = existing.category
-        if "category_id" in data:
-            cat = self._product_repo.find_category_by_id(int(data["category_id"]))
-            if not cat:
-                raise ValueError(f"Category {data['category_id']} not found")
-            category = cat
-
+        fields = ProductFieldParser
         updated = Product(
             id=existing.id,
-            sku=str(data.get("sku", existing.sku)),
-            title=str(data.get("title", existing.title)),
-            description=str(data.get("description", existing.description)),
-            price=Decimal(str(data["price"])) if "price" in data else existing.price,
-            currency=str(data.get("currency", existing.currency)),
-            image_url=str(data.get("image_url", existing.image_url)),
-            category=category,
+            sku=fields.sku(data["sku"]) if "sku" in data else existing.sku,
+            title=fields.title(data["title"]) if "title" in data else existing.title,
+            description=(
+                fields.description(data["description"]) if "description" in data
+                else existing.description
+            ),
+            price=fields.price(data["price"]) if "price" in data else existing.price,
+            currency=fields.currency(data["currency"]) if "currency" in data else existing.currency,
+            image_url=fields.image_url(data["image_url"]) if "image_url" in data else existing.image_url,
+            category=(
+                self._category(fields.category_id(data["category_id"])) if "category_id" in data
+                else existing.category
+            ),
             merchant_principal_id=merchant_principal_id,
-            is_active=bool(data.get("is_active", existing.is_active))
+            is_active=fields.is_active(data["is_active"]) if "is_active" in data else existing.is_active
         )
         return self._product_repo.save(updated)
 
@@ -191,10 +186,16 @@ class ProductService:
         if not existing:
             return False
 
-        if existing.merchant_principal_id is not None and existing.merchant_principal_id != merchant_principal_id:
+        if existing.merchant_principal_id != merchant_principal_id:
             raise PermissionError("Product does not belong to this merchant")
 
         return self._product_repo.delete(product_id)
+
+    def _category(self, category_id: int) -> Category:
+        category = self._product_repo.find_category_by_id(category_id)
+        if not category:
+            raise InvalidInputError("category_id", f"no category {category_id}")
+        return category
 
 def _merchant_principal_of(product: object) -> str:
     return str(getattr(product, "merchant_principal_id", "") or "")

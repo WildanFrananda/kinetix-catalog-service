@@ -15,7 +15,7 @@ class TestStorefrontAPI:
         client = APIClient()
         repo = DjangoProductRepository()
         cat = repo.save_category(Category(id=None, name="Apparel", slug="apparel"))
-        repo.save(Product(id=None, sku="TSHIRT-TEST", title="Test Tee", description="Desc", price=Decimal("150000.00"), currency="IDR", image_url="", category=cat))
+        repo.save(Product(id=None, sku="TSHIRT-TEST", title="Test Tee", description="Desc", price=Decimal("150000.00"), currency="IDR", image_url="", category=cat, merchant_principal_id="shop-1"))
 
         url = reverse("product-list")
         response = client.get(url)
@@ -28,7 +28,7 @@ class TestStorefrontAPI:
         client = APIClient()
         repo = DjangoProductRepository()
         cat = repo.save_category(Category(id=None, name="Apparel", slug="apparel"))
-        repo.save(Product(id=None, sku="TSHIRT-UNKNOWN", title="Test Tee", description="Desc", price=Decimal("150000.00"), currency="IDR", image_url="", category=cat))
+        repo.save(Product(id=None, sku="TSHIRT-UNKNOWN", title="Test Tee", description="Desc", price=Decimal("150000.00"), currency="IDR", image_url="", category=cat, merchant_principal_id="shop-1"))
         di._bin_stock_client = FakeUnreachableBinStockServicePort()
 
         response = client.get(reverse("product-list"))
@@ -38,3 +38,14 @@ class TestStorefrontAPI:
         assert summary["stock_status"] == "unknown"
         assert summary["available_stock"] is None
         assert summary["is_in_stock"] is None
+
+    @pytest.mark.parametrize("query", ["page_size=101", "page_size=0", "page=abc", "page=-1"])
+    def test_a_listing_query_that_is_not_a_page_is_a_400_not_a_500(self, query: str) -> None:
+        response = APIClient().get(f"/api/products/?{query}")
+        assert response.status_code == 400
+        assert response.json()["error"] == "INVALID_INPUT"
+
+    @pytest.mark.parametrize(("method", "path"), [("put", "/api/products/SOME-SKU/"), ("delete", "/api/products/SOME-SKU/"), ("post", "/api/products/manage/1/"), ("get", "/api/products/manage/1/")])
+    def test_a_method_a_route_does_not_serve_is_a_405_not_a_500(self, method: str, path: str) -> None:
+        response = getattr(APIClient(), method)(path)
+        assert response.status_code == 405

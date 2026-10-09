@@ -39,6 +39,10 @@ class ProductRepository(ABC):
 
     @abstractmethod
     def save(self, product: Product) -> Product:
+        """Inserts a product without an id and updates the one with it, by id and never by SKU.
+
+        Raises SkuTakenError when the SKU belongs to another product.
+        """
         pass
 
     @abstractmethod
@@ -55,8 +59,13 @@ class ProductRepository(ABC):
 
     @abstractmethod
     def save_category(self, category: Category) -> Category:
+        """Inserts a category without an id and updates the one with it, by id.
+
+        Raises CategoryTakenError when the name or slug belongs to another category.
+        """
         pass
 
     @abstractmethod
     def delete_category(self, category_id: int) -> bool:
+        """Raises CategoryInUseError while any product, withdrawn or not, is filed under it."""
         pass

@@ -1,18 +1,34 @@
-from typing import Any
+from dataclasses import replace
+from typing import Any, Dict
 from decimal import Decimal
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandParser
 from core.domain.entities import Category, Product
+from core.domain.errors import SkuTakenError
 from core.infrastructure.repositories import DjangoProductRepository
 
 class Command(BaseCommand):
-    help = "Seeds initial product catalog and category data"
+    help = "Seeds demo categories and products, sold by the merchant named on the command line"
+
+    def add_arguments(self, parser: CommandParser) -> None:
+        parser.add_argument(
+            "--merchant-principal-id",
+            required=True,
+            help="The merchant identity names for the seller of these products. A product on sale "
+            "always has one; the database refuses one without.",
+        )
 
     def handle(self, *args: Any, **options: Any) -> None:
         repo = DjangoProductRepository()
+        merchant = str(options["merchant_principal_id"])
 
-        apparel = repo.save_category(Category(id=None, name="Apparel", slug="apparel"))
-        footwear = repo.save_category(Category(id=None, name="Footwear", slug="footwear"))
-        accessories = repo.save_category(Category(id=None, name="Accessories", slug="accessories"))
+        existing: Dict[str, Category] = {c.slug: c for c in repo.find_all_categories()}
+
+        def category(name: str, slug: str) -> Category:
+            return existing.get(slug) or repo.save_category(Category(id=None, name=name, slug=slug))
+
+        apparel = category("Apparel", "apparel")
+        footwear = category("Footwear", "footwear")
+        accessories = category("Accessories", "accessories")
 
         products_data = [
             Product(
@@ -67,7 +83,12 @@ class Command(BaseCommand):
             )
         ]
 
+        created = 0
         for p in products_data:
-            repo.save(p)
+            try:
+                repo.save(replace(p, merchant_principal_id=merchant))
+                created += 1
+            except SkuTakenError:
+                self.stdout.write(f"{p.sku} already exists; left as it is")
 
-        self.stdout.write(self.style.SUCCESS("Successfully seeded 3 categories and 5 products!"))
+        self.stdout.write(self.style.SUCCESS(f"Seeded 3 categories and {created} new product(s) for {merchant}"))
