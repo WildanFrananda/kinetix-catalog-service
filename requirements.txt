@@ -20,5 +20,5 @@ types-grpcio-health-checking==1.0.0.20260518
 types-grpcio-reflection==1.0.0.20260508
 pytest==8.4.2
 pytest-django==4.11.1
-PyJWT[crypto]==2.10.1
+PyJWT[crypto]==2.15.1
 kinetix-contracts==1.0.20
