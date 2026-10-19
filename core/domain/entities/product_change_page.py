@@ -12,3 +12,4 @@ class ProductChangePage:
     next_updated_through: Optional[datetime]
     next_last_sku: str
     has_more: bool
+    next_transaction_id: Optional[int] = None

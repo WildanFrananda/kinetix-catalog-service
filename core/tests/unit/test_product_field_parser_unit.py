@@ -33,6 +33,16 @@ class TestProductFieldParserUnit:
     def test_an_absent_currency_is_the_settlement_currency(self) -> None:
         assert ProductFieldParser.currency(None) == "IDR"
 
+    @pytest.mark.parametrize("value", [None, "", "0", 0, -250, "-250", 1.5, "1.5", True, "abc", [], 1_000_001])
+    def test_a_weight_that_cannot_price_shipping_is_refused(self, value: object) -> None:
+        with pytest.raises(InvalidInputError) as refused:
+            ProductFieldParser.weight_grams(value)
+        assert refused.value.field == "weight_grams"
+
+    @pytest.mark.parametrize(("value", "stored"), [(250, 250), ("1200", 1200), (" 900 ", 900), (1_000_000, 1_000_000)])
+    def test_a_weight_is_stored_in_whole_grams(self, value: object, stored: int) -> None:
+        assert ProductFieldParser.weight_grams(value) == stored
+
     @pytest.mark.parametrize("value", [None, "", "  ", "has space", "a/b", "x" * 65, 12])
     def test_an_unusable_sku_is_refused(self, value: object) -> None:
         with pytest.raises(InvalidInputError) as refused:

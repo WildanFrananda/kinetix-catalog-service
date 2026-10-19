@@ -14,6 +14,7 @@ class ProductModel(models.Model):
     image_url = models.URLField(blank=True)
     category = models.ForeignKey(CategoryModel, related_name="products", on_delete=models.PROTECT)
     is_active = models.BooleanField(default=True, db_index=True)
+    weight_grams = models.PositiveIntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -30,6 +31,10 @@ class ProductModel(models.Model):
                     | (models.Q(merchant_principal_id__isnull=False) & ~models.Q(merchant_principal_id=""))
                 ),
                 name="products_on_sale_have_a_merchant",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(weight_grams__isnull=True) | models.Q(weight_grams__gt=0),
+                name="products_weigh_something",
             ),
         ]
 

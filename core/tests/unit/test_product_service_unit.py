@@ -2,7 +2,7 @@ from decimal import Decimal
 from typing import Optional
 import pytest
 from core.domain.entities import Product, Category, StockStatus
-from core.domain.errors import IdentityUnavailableError
+from core.domain.errors import IdentityUnavailableError, InvalidInputError
 from core.application.dto import ProductFilterDTO
 from core.application.services import ProductService
 from core.application.services.category_service import CategoryService
@@ -53,7 +53,9 @@ class TestProductServiceUnit:
             "title": "Running Shoes 42",
             "description": "Pro running shoes",
             "price": "500000.00",
-            "category_id": cat.id
+            "category_id": cat.id,
+
+            "weight_grams": 250
         })
 
         assert product.id is not None
@@ -70,7 +72,9 @@ class TestProductServiceUnit:
             "sku": "SHOES-50",
             "title": "Merchant 50 Product",
             "price": "100000.00",
-            "category_id": cat.id
+            "category_id": cat.id,
+
+            "weight_grams": 250
         })
 
         assert p.id is not None
@@ -87,7 +91,9 @@ class TestProductServiceUnit:
             "sku": "SHOES-50",
             "title": "Merchant 50 Product",
             "price": "100000.00",
-            "category_id": cat.id
+            "category_id": cat.id,
+
+            "weight_grams": 250
         })
 
         assert p.id is not None
@@ -149,7 +155,9 @@ class TestProductServiceUnit:
                 "sku": "SHOES-RUN-42",
                 "title": "Running Shoes 42",
                 "price": "500000.00",
-                "category_id": cat.id
+                "category_id": cat.id,
+
+                "weight_grams": 250
             })
 
     @pytest.mark.parametrize(
@@ -180,7 +188,9 @@ class TestProductServiceUnit:
                 "sku": "SHOES-RUN-42",
                 "title": "Running Shoes 42",
                 "price": "500000.00",
-                "category_id": cat.id
+                "category_id": cat.id,
+
+                "weight_grams": 250
             })
 
     def test_a_standing_catalog_never_heard_of_is_identitys_to_allow(self) -> None:
@@ -200,6 +210,8 @@ class TestProductServiceUnit:
                 "title": "Running Shoes 42",
                 "price": "500000.00",
                 "category_id": cat.id,
+
+                "weight_grams": 250,
             },
         )
 
@@ -224,6 +236,8 @@ class TestProductServiceUnit:
                 "title": "Running Shoes 42",
                 "price": "500000.00",
                 "category_id": cat.id,
+
+                "weight_grams": 250,
             },
         )
 
@@ -238,7 +252,9 @@ class TestProductServiceUnit:
             "sku": "SHOES-50",
             "title": "Merchant 50 Product",
             "price": "100000.00",
-            "category_id": cat.id
+            "category_id": cat.id,
+
+            "weight_grams": 250
         })
 
         assert created.id is not None
@@ -267,6 +283,54 @@ class TestProductServiceUnit:
 
         deleted = cat_service.delete_category(cat.id)
         assert deleted is True
+
+    def test_a_product_is_not_created_without_its_weight(self) -> None:
+        repo = FakeProductRepository()
+        cat = repo.save_category(Category(id=None, name="Shoes", slug="shoes"))
+        service = ProductService(
+            product_repo=repo,
+            bin_stock_port=FakeBinStockServicePort(),
+            identity_port=FakeIdentityServicePort()
+        )
+
+        with pytest.raises(InvalidInputError) as refused:
+            service.create_product(merchant_principal_id="3c9a77b1-58de-4a01-8f2e-6d4b19c0a8f3", data={
+                "sku": "SHOES-RUN-43",
+                "title": "Running Shoes 43",
+                "price": "500000.00",
+                "category_id": cat.id
+            })
+
+        assert refused.value.field == "weight_grams"
+
+    def test_a_product_without_a_weight_gets_one_by_update_and_keeps_it(self) -> None:
+        repo = FakeProductRepository()
+        cat = repo.save_category(Category(id=None, name="Shoes", slug="shoes"))
+        legacy = repo.save(Product(
+            id=None,
+            sku="SHOES-OLD-41",
+            title="Old Shoes 41",
+            description="",
+            price=Decimal("300000.00"),
+            currency="IDR",
+            image_url="",
+            category=cat,
+            merchant_principal_id="3c9a77b1-58de-4a01-8f2e-6d4b19c0a8f3"
+        ))
+        service = ProductService(
+            product_repo=repo,
+            bin_stock_port=FakeBinStockServicePort(),
+            identity_port=FakeIdentityServicePort()
+        )
+        assert legacy.id is not None
+        assert legacy.weight_grams is None
+
+        weighed = service.update_product(legacy.id, "3c9a77b1-58de-4a01-8f2e-6d4b19c0a8f3", {"weight_grams": "1100"})
+        retitled = service.update_product(legacy.id, "3c9a77b1-58de-4a01-8f2e-6d4b19c0a8f3", {"title": "Old Shoes"})
+
+        assert weighed is not None and weighed.weight_grams == 1100
+        assert retitled is not None and retitled.weight_grams == 1100
+
 
 class TestStockIsAskedForOnce:
     def _page_of(self, repo: FakeProductRepository, skus: list[str]) -> None:
@@ -322,4 +386,3 @@ class TestStockIsAskedForOnce:
                 "an unanswered warehouse is not a shop with nothing in it"
             )
             assert summary.is_in_stock is None
-

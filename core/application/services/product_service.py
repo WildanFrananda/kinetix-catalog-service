@@ -71,6 +71,7 @@ class ProductService:
                     currency=p.currency,
                     image_url=p.image_url,
                     merchant_principal_id=_merchant_principal_of(p),
+                    weight_grams=p.weight_grams,
                     available_stock=quantity,
                     is_in_stock=None if quantity is None else quantity > 0,
                     stock_status=_status_of(stock)
@@ -114,6 +115,7 @@ class ProductService:
             currency=p.currency,
             image_url=p.image_url,
             merchant_principal_id=_merchant_principal_of(p),
+            weight_grams=p.weight_grams,
             warehouse_stock=warehouse
         )
 
@@ -144,7 +146,8 @@ class ProductService:
             image_url=fields.image_url(data.get("image_url")),
             category=self._category(fields.category_id(data.get("category_id"))),
             merchant_principal_id=merchant_principal_id,
-            is_active=True
+            is_active=True,
+            weight_grams=fields.weight_grams(data.get("weight_grams"))
         )
         return self._product_repo.save(product)
 
@@ -175,7 +178,11 @@ class ProductService:
                 else existing.category
             ),
             merchant_principal_id=merchant_principal_id,
-            is_active=fields.is_active(data["is_active"]) if "is_active" in data else existing.is_active
+            is_active=fields.is_active(data["is_active"]) if "is_active" in data else existing.is_active,
+            weight_grams=(
+                fields.weight_grams(data["weight_grams"]) if "weight_grams" in data
+                else existing.weight_grams
+            )
         )
         return self._product_repo.save(updated)
 

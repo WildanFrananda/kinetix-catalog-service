@@ -2,7 +2,8 @@ from datetime import datetime
 from typing import Optional, List, Tuple
 from decimal import Decimal
 from django.db import IntegrityError, transaction
-from django.db.models import ProtectedError, Q
+from django.db.models import BooleanField, ProtectedError, Q
+from django.db.models.expressions import RawSQL
 from django.utils import timezone
 from core.domain.entities import Product, Category, ProductChangePage
 from core.domain.errors import CategoryInUseError, CategoryTakenError, SkuTakenError
@@ -73,6 +74,65 @@ class DjangoProductRepository(ProductRepository):
             has_more=has_more,
         )
 
+    def find_changed_after(
+        self,
+        transaction_id: int,
+        last_sku: str = "",
+        limit: int = 100,
+    ) -> ProductChangePage:
+        qs = (
+            ProductModel.objects.select_related("category")
+            .annotate(
+                change_transaction=RawSQL("products.change_transaction_id::text", ()),
+                settled=RawSQL(
+                    "products.change_transaction_id < pg_snapshot_xmin(pg_current_snapshot())",
+                    (),
+                    output_field=BooleanField(),
+                ),
+                after_cursor=RawSQL(
+                    "(products.change_transaction_id, products.sku) > (%s::xid8, %s)",
+                    (str(transaction_id), last_sku),
+                    output_field=BooleanField(),
+                ),
+            )
+            .filter(settled=True, after_cursor=True)
+            .order_by(RawSQL("products.change_transaction_id", ()).asc(), "sku")
+        )
+
+        rows = list(qs[: limit + 1])
+        has_more = len(rows) > limit
+        rows = rows[:limit]
+
+        upserted: List[Product] = []
+        removed_skus: List[str] = []
+        for row in rows:
+            if row.is_active:
+                upserted.append(self._to_domain_entity(row))
+            else:
+                removed_skus.append(row.sku)
+
+        if not rows:
+            return ProductChangePage(
+                upserted=upserted,
+                removed_skus=removed_skus,
+                next_updated_through=None,
+                next_last_sku=last_sku,
+                has_more=False,
+                next_transaction_id=transaction_id,
+            )
+
+        last = rows[-1]
+        last_transaction: object = getattr(last, "change_transaction")
+
+        return ProductChangePage(
+            upserted=upserted,
+            removed_skus=removed_skus,
+            next_updated_through=max(row.updated_at for row in rows),
+            next_last_sku=last.sku,
+            has_more=has_more,
+            next_transaction_id=int(str(last_transaction)),
+        )
+
     def count_active_products(self) -> int:
         return ProductModel.objects.filter(is_active=True).count()
 
@@ -107,6 +167,7 @@ class DjangoProductRepository(ProductRepository):
                 orm_p.category = category_orm
                 orm_p.merchant_principal_id = product.merchant_principal_id
                 orm_p.is_active = product.is_active
+                orm_p.weight_grams = product.weight_grams
                 orm_p.save()
         except IntegrityError as error:
             if ProductModel.objects.filter(sku=product.sku).exclude(id=product.id).exists():
@@ -174,4 +235,5 @@ class DjangoProductRepository(ProductRepository):
             is_active=orm_p.is_active,
             created_at=orm_p.created_at,
             updated_at=orm_p.updated_at,
+            weight_grams=orm_p.weight_grams,
         )

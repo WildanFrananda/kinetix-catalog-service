@@ -8,6 +8,7 @@ from core.infrastructure.security.peer_authorization_interceptor import (
     service_of,
 )
 from core.infrastructure.security.principal import Principal
+from core.infrastructure.security.signing_key_set import SigningKeySet
 from core.infrastructure.security.token_verifier import TokenVerifier
 from core.infrastructure.security.identity_token_authentication import IdentityTokenAuthentication
 
@@ -20,6 +21,7 @@ __all__ = [
     "PeerAuthorizationInterceptor",
     "service_of",
     "Principal",
+    "SigningKeySet",
     "TokenVerifier",
     "IdentityTokenAuthentication",
 ]

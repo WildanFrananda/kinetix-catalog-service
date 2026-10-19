@@ -65,7 +65,7 @@ class TestProductOwnershipUnit:
         with pytest.raises(SkuTakenError):
             _service(repo).create_product(
                 SELLER,
-                {"sku": "VICTIM-1", "title": "mine now", "price": "1", "category_id": victim.category.id},
+                {"sku": "VICTIM-1", "title": "mine now", "price": "1", "category_id": victim.category.id, "weight_grams": 100},
             )
 
         assert repo.find_by_sku("VICTIM-1") == victim

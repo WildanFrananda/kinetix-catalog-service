@@ -39,7 +39,8 @@ class Command(BaseCommand):
                 price=Decimal("189000.00"),
                 currency="IDR",
                 image_url="https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=800",
-                category=apparel
+                category=apparel,
+                weight_grams=250
             ),
             Product(
                 id=None,
@@ -49,7 +50,8 @@ class Command(BaseCommand):
                 price=Decimal("450000.00"),
                 currency="IDR",
                 image_url="https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=800",
-                category=apparel
+                category=apparel,
+                weight_grams=700
             ),
             Product(
                 id=None,
@@ -59,7 +61,8 @@ class Command(BaseCommand):
                 price=Decimal("620000.00"),
                 currency="IDR",
                 image_url="https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=800",
-                category=apparel
+                category=apparel,
+                weight_grams=900
             ),
             Product(
                 id=None,
@@ -69,7 +72,8 @@ class Command(BaseCommand):
                 price=Decimal("890000.00"),
                 currency="IDR",
                 image_url="https://images.unsplash.com/photo-1549298916-b41d501d3772?w=800",
-                category=footwear
+                category=footwear,
+                weight_grams=1200
             ),
             Product(
                 id=None,
@@ -79,7 +83,8 @@ class Command(BaseCommand):
                 price=Decimal("149000.00"),
                 currency="IDR",
                 image_url="https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=800",
-                category=accessories
+                category=accessories,
+                weight_grams=150
             )
         ]
 

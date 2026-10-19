@@ -12,4 +12,5 @@ class ProductDetailSerializer(serializers.Serializer[Dict[str, Any]]):
     currency = serializers.CharField()
     image_url = serializers.URLField()
     merchant_principal_id = serializers.CharField()
+    weight_grams = serializers.IntegerField(allow_null=True)
     warehouse_stock = WarehouseStockSerializer()
