@@ -6,6 +6,7 @@ from jwt import InvalidTokenError
 from jwt import PyJWKClient
 
 from core.infrastructure.security.access_claims import AccessClaims
+from core.infrastructure.security.signing_key_set import SigningKeySet
 
 
 class TokenVerifier:
@@ -14,8 +15,8 @@ class TokenVerifier:
     def __init__(self) -> None:
         self._issuer: str = self._required("JWT_ISSUER")
         self._audience: str = self._required("JWT_AUDIENCE")
-        self._jwks: PyJWKClient = PyJWKClient(
-            self._required("IDENTITY_JWKS_URL"), cache_keys=True, timeout=3
+        self._keys: SigningKeySet = SigningKeySet(
+            PyJWKClient(self._required("IDENTITY_JWKS_URL"), cache_keys=True, timeout=3)
         )
 
     @staticmethod
@@ -32,7 +33,7 @@ class TokenVerifier:
         return cls._instance
 
     def verify_access(self, token: str) -> AccessClaims:
-        key = self._jwks.get_signing_key_from_jwt(token).key
+        key = self._keys.key_for(token)
         payload: object = jwt.decode(
             token,
             key,

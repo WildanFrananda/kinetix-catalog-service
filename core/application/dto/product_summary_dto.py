@@ -14,6 +14,7 @@ class ProductSummaryDTO:
     currency: str
     image_url: str
     merchant_principal_id: str
+    weight_grams: Optional[int]
     available_stock: Optional[int]
     is_in_stock: Optional[bool]
     stock_status: StockStatus

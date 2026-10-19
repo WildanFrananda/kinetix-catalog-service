@@ -28,13 +28,19 @@ class CatalogServicer(catalog_pb2_grpc.CatalogServiceServicer):  # type: ignore[
         limit = request.limit if request.limit > 0 else DEFAULT_PAGE
         limit = min(limit, MAX_PAGE)
 
-        updated_through = _from_proto_time(request.cursor.updated_through)
-
-        page = self._product_repo.find_changed_since(
-            updated_through=updated_through,
-            last_sku=request.cursor.last_sku,
-            limit=limit,
-        )
+        cursor = request.cursor
+        if cursor.HasField("transaction_id"):
+            page = self._product_repo.find_changed_after(
+                transaction_id=cursor.transaction_id,
+                last_sku=cursor.last_sku,
+                limit=limit,
+            )
+        else:
+            page = self._product_repo.find_changed_since(
+                updated_through=_from_proto_time(cursor.updated_through),
+                last_sku=cursor.last_sku,
+                limit=limit,
+            )
 
         response = catalog_pb2.ChangedSinceResponse(
             upserted=[_to_proto_product(p) for p in page.upserted],
@@ -44,6 +50,8 @@ class CatalogServicer(catalog_pb2_grpc.CatalogServiceServicer):  # type: ignore[
         response.next.last_sku = page.next_last_sku
         if page.next_updated_through is not None:
             response.next.updated_through.FromDatetime(page.next_updated_through)
+        if page.next_transaction_id is not None:
+            response.next.transaction_id = page.next_transaction_id
 
         return response
 
@@ -93,6 +101,8 @@ def _to_proto_product(product: Product) -> catalog_pb2.Product:
     )
     if product.updated_at is not None:
         message.updated_at.FromDatetime(product.updated_at)
+    if product.weight_grams is not None:
+        message.weight_grams = product.weight_grams
     return message
 
 

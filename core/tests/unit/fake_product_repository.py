@@ -10,6 +10,8 @@ class FakeProductRepository(ProductRepository):
         self._store: Dict[str, Product] = {}
         self._categories: Dict[int, Category] = {}
         self._next_id = 1
+        self.transactions: Dict[str, int] = {}
+        self.last_changed_after: Optional[Tuple[int, str, int]] = None
 
     def find_page(
         self,
@@ -69,6 +71,48 @@ class FakeProductRepository(ProductRepository):
             next_updated_through=next_updated_through,
             next_last_sku=next_last_sku,
             has_more=has_more,
+        )
+
+    def find_changed_after(
+        self,
+        transaction_id: int,
+        last_sku: str = "",
+        limit: int = 100,
+    ) -> ProductChangePage:
+        self.last_changed_after = (transaction_id, last_sku, limit)
+
+        rows = sorted(
+            (p for p in self._store.values() if p.sku in self.transactions),
+            key=lambda p: (self.transactions[p.sku], p.sku),
+        )
+        rows = [p for p in rows if (self.transactions[p.sku], p.sku) > (transaction_id, last_sku)]
+
+        has_more = len(rows) > limit
+        rows = rows[:limit]
+
+        upserted = [p for p in rows if p.is_active]
+        removed = [p.sku for p in rows if not p.is_active]
+
+        if not rows:
+            return ProductChangePage(
+                upserted=upserted,
+                removed_skus=removed,
+                next_updated_through=None,
+                next_last_sku=last_sku,
+                has_more=False,
+                next_transaction_id=transaction_id,
+            )
+
+        return ProductChangePage(
+            upserted=upserted,
+            removed_skus=removed,
+            next_updated_through=max(
+                (p.updated_at for p in rows if p.updated_at is not None),
+                default=None,
+            ),
+            next_last_sku=rows[-1].sku,
+            has_more=has_more,
+            next_transaction_id=self.transactions[rows[-1].sku],
         )
 
     def count_active_products(self) -> int:

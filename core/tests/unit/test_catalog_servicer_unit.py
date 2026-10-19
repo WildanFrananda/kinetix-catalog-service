@@ -27,7 +27,13 @@ class _Context:
         raise RuntimeError(details)
 
 
-def _product(sku: str, when: datetime, active: bool = True, price: str = "750000.00") -> Product:
+def _product(
+    sku: str,
+    when: datetime,
+    active: bool = True,
+    price: str = "750000.00",
+    weight_grams: Optional[int] = None
+) -> Product:
     return Product(
         id=None,
         sku=sku,
@@ -40,6 +46,7 @@ def _product(sku: str, when: datetime, active: bool = True, price: str = "750000
         merchant_principal_id="shop-1",
         is_active=active,
         updated_at=when,
+        weight_grams=weight_grams,
     )
 
 
@@ -105,6 +112,65 @@ class TestChangedSince:
         ).has_more is False
 
 
+class TestChangedAfterATransaction:
+    def test_a_cursor_with_a_transaction_reads_in_transaction_order(self) -> None:
+        repo = _repo_with(
+            _product("SHOE-A", NOON + timedelta(minutes=5)),
+            _product("SHOE-B", NOON),
+        )
+        repo.transactions = {"SHOE-A": 700, "SHOE-B": 900}
+        servicer = CatalogServicer(repo)
+        request = catalog_pb2.ChangedSinceRequest(limit=10)
+        request.cursor.transaction_id = 0
+
+        response = servicer.ChangedSince(request, _ctx(_Context()))
+
+        assert [p.sku for p in response.upserted] == ["SHOE-A", "SHOE-B"]
+        assert repo.last_changed_after == (0, "", 10)
+
+    def test_the_next_cursor_names_the_last_transaction_and_sku(self) -> None:
+        repo = _repo_with(_product("SHOE-A", NOON), _product("SHOE-B", NOON))
+        repo.transactions = {"SHOE-A": 700, "SHOE-B": 700}
+        servicer = CatalogServicer(repo)
+        request = catalog_pb2.ChangedSinceRequest(limit=1)
+        request.cursor.transaction_id = 0
+
+        first = servicer.ChangedSince(request, _ctx(_Context()))
+        second = servicer.ChangedSince(
+            catalog_pb2.ChangedSinceRequest(cursor=first.next, limit=1),
+            _ctx(_Context()),
+        )
+
+        assert first.next.HasField("transaction_id")
+        assert (first.next.transaction_id, first.next.last_sku) == (700, "SHOE-A")
+        assert [p.sku for p in second.upserted] == ["SHOE-B"]
+        assert repo.last_changed_after == (700, "SHOE-A", 1)
+
+    def test_an_empty_page_gives_the_cursor_back(self) -> None:
+        repo = _repo_with(_product("SHOE-A", NOON))
+        repo.transactions = {"SHOE-A": 700}
+        servicer = CatalogServicer(repo)
+        request = catalog_pb2.ChangedSinceRequest(limit=10)
+        request.cursor.transaction_id = 700
+        request.cursor.last_sku = "SHOE-A"
+
+        response = servicer.ChangedSince(request, _ctx(_Context()))
+
+        assert list(response.upserted) == []
+        assert (response.next.transaction_id, response.next.last_sku) == (700, "SHOE-A")
+        assert response.has_more is False
+
+    def test_a_cursor_without_a_transaction_reads_the_old_way(self) -> None:
+        repo = _repo_with(_product("SHOE-A", NOON))
+        servicer = CatalogServicer(repo)
+
+        response = servicer.ChangedSince(catalog_pb2.ChangedSinceRequest(limit=10), _ctx(_Context()))
+
+        assert [p.sku for p in response.upserted] == ["SHOE-A"]
+        assert repo.last_changed_after is None
+        assert not response.next.HasField("transaction_id")
+
+
 class TestPriceConversion:
     @pytest.mark.parametrize(
         ("rupiah", "sen"),
@@ -166,3 +232,21 @@ class TestCountProducts:
         response = servicer.CountProducts(catalog_pb2.CountProductsRequest(), _ctx(_Context()))
 
         assert response.total == 1
+
+
+class TestProductWeight:
+    def test_a_weighed_product_carries_its_grams(self) -> None:
+        servicer = CatalogServicer(_repo_with(_product("SHOE-W", NOON, weight_grams=1200)))
+
+        response = servicer.GetProduct(catalog_pb2.GetProductRequest(sku="SHOE-W"), _ctx(_Context()))
+
+        assert response.product.HasField("weight_grams")
+        assert response.product.weight_grams == 1200
+
+    def test_a_product_with_no_weight_says_so_rather_than_zero(self) -> None:
+        servicer = CatalogServicer(_repo_with(_product("SHOE-N", NOON)))
+
+        response = servicer.GetProduct(catalog_pb2.GetProductRequest(sku="SHOE-N"), _ctx(_Context()))
+
+        assert not response.product.HasField("weight_grams")
+

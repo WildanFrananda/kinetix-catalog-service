@@ -26,6 +26,19 @@ class ProductRepository(ABC):
         """Products whose record changed after the given position, oldest change first."""
 
     @abstractmethod
+    def find_changed_after(
+        self,
+        transaction_id: int,
+        last_sku: str = "",
+        limit: int = 100,
+    ) -> ProductChangePage:
+        """Products last changed by a transaction after the given position, in commit-safe order.
+
+        Only transactions older than every transaction still running are served, so a product whose
+        transaction commits late is served late rather than skipped.
+        """
+
+    @abstractmethod
     def count_active_products(self) -> int:
         """How many products are on sale."""
 

@@ -66,6 +66,11 @@ class TestCatalogContractThisServiceServes:
             "updated_at",
         } <= _fields(catalog_pb2.Product)
 
+    def test_a_products_weight_can_be_absent_rather_than_zero(self) -> None:
+        field = catalog_pb2.Product.DESCRIPTOR.fields_by_name["weight_grams"]
+        assert field.type == field.TYPE_INT64
+        assert field.has_presence
+
     def test_price_is_the_shared_money_type(self) -> None:
         field = catalog_pb2.Product.DESCRIPTOR.fields_by_name["price"]
         assert field.message_type is not None
@@ -74,6 +79,11 @@ class TestCatalogContractThisServiceServes:
 
     def test_the_cursor_has_both_halves(self) -> None:
         assert {"updated_through", "last_sku"} <= _fields(catalog_pb2.Cursor)
+
+    def test_the_cursor_can_name_a_transaction_or_leave_it_out(self) -> None:
+        field = catalog_pb2.Cursor.DESCRIPTOR.fields_by_name["transaction_id"]
+        assert field.type == field.TYPE_UINT64
+        assert field.has_presence
 
     def test_removals_are_explicit(self) -> None:
         assert "removed_skus" in _fields(catalog_pb2.ChangedSinceResponse)

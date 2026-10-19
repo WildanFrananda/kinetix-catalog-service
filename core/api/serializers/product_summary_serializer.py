@@ -10,6 +10,7 @@ class ProductSummarySerializer(serializers.Serializer[Dict[str, Any]]):
     currency = serializers.CharField()
     image_url = serializers.URLField()
     merchant_principal_id = serializers.CharField()
+    weight_grams = serializers.IntegerField(allow_null=True)
     available_stock = serializers.IntegerField(allow_null=True)
     is_in_stock = serializers.BooleanField(allow_null=True)
     stock_status = serializers.CharField()

@@ -20,3 +20,4 @@ class Product:
     stock_info: Optional[StockInfo] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    weight_grams: Optional[int] = None

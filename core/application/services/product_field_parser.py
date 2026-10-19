@@ -10,6 +10,7 @@ _IMAGE_URL_LIMIT = 200
 _CENT = Decimal("0.01")
 _LARGEST_PRICE = Decimal("9999999999.99")
 _SETTLEMENT_CURRENCY = "IDR"
+_HEAVIEST_GRAMS = 1_000_000
 
 
 class ProductFieldParser:
@@ -75,6 +76,24 @@ class ProductFieldParser:
         if parsed.scheme not in ("http", "https") or not parsed.netloc:
             raise InvalidInputError("image_url", "must be an http or https URL")
         return value
+
+    @staticmethod
+    def weight_grams(value: object) -> int:
+        if value is None:
+            raise InvalidInputError("weight_grams", "is required: shipping is priced by weight")
+        if isinstance(value, bool):
+            raise InvalidInputError("weight_grams", "must be a positive whole number of grams")
+        if isinstance(value, int):
+            grams = value
+        elif isinstance(value, str) and value.strip().isdigit():
+            grams = int(value.strip())
+        else:
+            raise InvalidInputError("weight_grams", "must be a positive whole number of grams")
+        if grams <= 0:
+            raise InvalidInputError("weight_grams", "must be a positive whole number of grams")
+        if grams > _HEAVIEST_GRAMS:
+            raise InvalidInputError("weight_grams", f"must be at most {_HEAVIEST_GRAMS} grams")
+        return grams
 
     @staticmethod
     def category_id(value: object) -> int:
