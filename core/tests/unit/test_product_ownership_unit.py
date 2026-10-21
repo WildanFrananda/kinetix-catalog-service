@@ -5,7 +5,7 @@ import pytest
 
 from core.application.services import ProductService
 from core.domain.entities import Category, Product
-from core.domain.errors import SkuTakenError
+from core.domain.errors import InvalidInputError, ProductNotOwnedError, SkuTakenError
 from core.tests.unit.fake_bin_stock_service_port import FakeBinStockServicePort
 from core.tests.unit.fake_identity_service_port import FakeIdentityServicePort
 from core.tests.unit.fake_product_repository import FakeProductRepository
@@ -45,7 +45,7 @@ class TestProductOwnershipUnit:
         orphan = _listed(repo, "ORPHAN-1", RIVAL)
         repo.save(replace(orphan, merchant_principal_id=None, is_active=False))
 
-        with pytest.raises(PermissionError, match="does not belong to this merchant"):
+        with pytest.raises(ProductNotOwnedError, match="does not belong to this merchant"):
             _service(repo).update_product(orphan.id or 0, SELLER, {"price": "1"})
 
         assert repo.find_by_id(orphan.id or 0) == replace(orphan, merchant_principal_id=None, is_active=False)
@@ -55,7 +55,7 @@ class TestProductOwnershipUnit:
         orphan = _listed(repo, "ORPHAN-2", RIVAL)
         repo.save(replace(orphan, merchant_principal_id=None))
 
-        with pytest.raises(PermissionError, match="does not belong to this merchant"):
+        with pytest.raises(ProductNotOwnedError, match="does not belong to this merchant"):
             _service(repo).delete_product(orphan.id or 0, SELLER)
 
     def test_a_new_product_cannot_take_another_merchants_sku(self) -> None:
@@ -75,8 +75,10 @@ class TestProductOwnershipUnit:
         victim = _listed(repo, "VICTIM-2", RIVAL)
         own = _listed(repo, "OWN-1", SELLER)
 
-        with pytest.raises(SkuTakenError):
+        with pytest.raises(InvalidInputError) as refused:
             _service(repo).update_product(own.id or 0, SELLER, {"sku": "VICTIM-2", "price": "2"})
+
+        assert refused.value.field == "sku"
 
         assert repo.find_by_sku("VICTIM-2") == victim
         assert repo.find_by_sku("OWN-1") == own

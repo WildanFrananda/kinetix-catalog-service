@@ -22,5 +22,11 @@ keywords = ["key", "api", "token", "secret", "client", "passwd", "password", "au
   #
   # The hit is in core/tests/unit/test_order_service_unit.py, a file that no longer exists in
   # the working tree; it survives in history, which is what gitleaks scans.
-  regexes = ['''idempotency_key\s*=\s*["'][^"']+["']''']
+  #
+  # A token's subject is a principal id, a UUID, and names an account without granting anything.
+  # The hit is the fixture in core/tests/unit/test_product_service_unit.py; only a bare UUID passes.
+  regexes = [
+    '''idempotency_key\s*=\s*["'][^"']+["']''',
+    '''token_subject\s*=\s*"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"''',
+  ]
   regexTarget = "line"

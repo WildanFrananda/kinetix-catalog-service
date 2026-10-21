@@ -31,11 +31,17 @@ class TestRouteTemplate:
     def test_no_route_this_service_declares_can_carry_a_digit_where_an_id_would_go(self) -> None:
         declared = [
             "admin/",
+            "api/categories",
             "api/categories/",
+            "api/categories/<int:category_id>",
             "api/categories/<int:category_id>/",
+            "api/products",
             "api/products/",
+            "api/products/create",
             "api/products/create/",
+            "api/products/manage/<int:product_id>",
             "api/products/manage/<int:product_id>/",
+            "api/products/<str:sku>",
             "api/products/<str:sku>/",
             "health",
             "health/ready",

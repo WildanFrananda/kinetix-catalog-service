@@ -33,7 +33,7 @@ class TestProductFieldParserUnit:
     def test_an_absent_currency_is_the_settlement_currency(self) -> None:
         assert ProductFieldParser.currency(None) == "IDR"
 
-    @pytest.mark.parametrize("value", [None, "", "0", 0, -250, "-250", 1.5, "1.5", True, "abc", [], 1_000_001])
+    @pytest.mark.parametrize("value", [None, "", "0", 0, -250, "-250", 1.5, "1.5", True, "abc", [], 1_000_001, "²", "١٢"])
     def test_a_weight_that_cannot_price_shipping_is_refused(self, value: object) -> None:
         with pytest.raises(InvalidInputError) as refused:
             ProductFieldParser.weight_grams(value)
@@ -49,6 +49,16 @@ class TestProductFieldParserUnit:
             ProductFieldParser.sku(value)
         assert refused.value.field == "sku"
 
+    @pytest.mark.parametrize("value", ["create", ".", "..", "search", "search-1", "searchlight", "suggest", "suggest-2"])
+    def test_a_sku_its_own_product_page_could_not_reach_is_refused(self, value: str) -> None:
+        with pytest.raises(InvalidInputError) as refused:
+            ProductFieldParser.sku(value)
+        assert refused.value.field == "sku"
+
+    @pytest.mark.parametrize("value", ["SHOE-1", "creates", "manage", "Search-1", "research", "x.y", "..."])
+    def test_a_sku_that_only_resembles_a_route_is_kept(self, value: str) -> None:
+        assert ProductFieldParser.sku(value) == value
+
     @pytest.mark.parametrize("value", ["false", "true", 0, 1, None])
     def test_is_active_must_be_a_boolean_not_text_that_reads_like_one(self, value: object) -> None:
         with pytest.raises(InvalidInputError) as refused:
@@ -61,7 +71,7 @@ class TestProductFieldParserUnit:
             ProductFieldParser.image_url(value)
         assert refused.value.field == "image_url"
 
-    @pytest.mark.parametrize("value", [None, 0, -3, True, "three", "1.5"])
+    @pytest.mark.parametrize("value", [None, 0, -3, True, "three", "1.5", "²", "١٢"])
     def test_a_category_id_must_be_a_positive_whole_number(self, value: object) -> None:
         with pytest.raises(InvalidInputError) as refused:
             ProductFieldParser.category_id(value)
@@ -82,9 +92,17 @@ class TestProductFilterParserUnit:
             ({"page_size": "0"}, "page_size"),
             ({"page_size": "101"}, "page_size"),
             ({"page_size": "1e3"}, "page_size"),
+            ({"page": "²"}, "page"),
+            ({"page": "١٢"}, "page"),
+            ({"page_size": "²"}, "page_size"),
+            ({"page": "10001"}, "page"),
+            ({"page": "100000000000000000000"}, "page"),
         ],
     )
     def test_a_query_that_is_not_a_page_is_refused(self, query: Dict[str, str], field: str) -> None:
         with pytest.raises(InvalidInputError) as refused:
             ProductFilterParser.parse(query)
         assert refused.value.field == field
+
+    def test_the_deepest_page_is_still_served(self) -> None:
+        assert ProductFilterParser.parse({"page": "10000"}).page == 10000

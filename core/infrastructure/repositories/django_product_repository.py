@@ -137,6 +137,9 @@ class DjangoProductRepository(ProductRepository):
         return ProductModel.objects.filter(is_active=True).count()
 
     def find_by_sku(self, sku: str) -> Optional[Product]:
+        if "\x00" in sku:
+            return None
+
         try:
             orm_p = ProductModel.objects.select_related("category").get(sku=sku, is_active=True)
             return self._to_domain_entity(orm_p)

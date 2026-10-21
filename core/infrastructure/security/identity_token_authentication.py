@@ -2,7 +2,12 @@ import json
 import logging
 from typing import Optional, Tuple
 
-from jwt.exceptions import PyJWKClientConnectionError, PyJWKClientError
+from jwt.exceptions import (
+    InvalidTokenError,
+    PyJWKClientConnectionError,
+    PyJWKClientError,
+    PyJWKSetError,
+)
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.request import Request
@@ -39,9 +44,12 @@ class IdentityTokenAuthentication(BaseAuthentication):
             logger.error("identity's JWKS endpoint answered, but not usably: %s", jwks_error)
             raise IdentityKeysUnavailable() from jwks_error
         except json.JSONDecodeError as malformed:
-            logger.error("identity's JWKS endposint did not return JSON: %s", malformed)
+            logger.error("identity's JWKS endpoint did not return JSON: %s", malformed)
             raise IdentityKeysUnavailable() from malformed
-        except Exception as cause:
+        except PyJWKSetError as unusable:
+            logger.error("identity's JWKS endpoint published no usable key: %s", unusable)
+            raise IdentityKeysUnavailable() from unusable
+        except InvalidTokenError as cause:
             logger.warning("token verification failed: %s", cause)
             raise AuthenticationFailed("Invalid token") from cause
 

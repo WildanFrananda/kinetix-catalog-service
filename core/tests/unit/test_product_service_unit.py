@@ -1,8 +1,13 @@
 from decimal import Decimal
-from typing import Optional
+from typing import Dict
 import pytest
 from core.domain.entities import Product, Category, StockStatus
-from core.domain.errors import IdentityUnavailableError, InvalidInputError
+from core.domain.errors import (
+    IdentityUnavailableError,
+    InvalidInputError,
+    MerchantMayNotSellError,
+    ProductNotOwnedError,
+)
 from core.application.dto import ProductFilterDTO
 from core.application.services import ProductService
 from core.application.services.category_service import CategoryService
@@ -78,7 +83,7 @@ class TestProductServiceUnit:
         })
 
         assert p.id is not None
-        with pytest.raises(PermissionError, match="Product does not belong to this merchant"):
+        with pytest.raises(ProductNotOwnedError, match="Product does not belong to this merchant"):
             service.update_product(product_id=p.id, merchant_principal_id="9f1d4a3e-1c62-4d0a-9a7b-2f5c8e0b41d7", data={"title": "Hacked Title"})
 
     def test_delete_product_idor_protection_rejects_other_merchant(self) -> None:
@@ -97,7 +102,7 @@ class TestProductServiceUnit:
         })
 
         assert p.id is not None
-        with pytest.raises(PermissionError, match="Product does not belong to this merchant"):
+        with pytest.raises(ProductNotOwnedError, match="Product does not belong to this merchant"):
             service.delete_product(product_id=p.id, merchant_principal_id="9f1d4a3e-1c62-4d0a-9a7b-2f5c8e0b41d7")
 
     def test_unreachable_warehouse_lists_stock_as_unknown_not_zero(self) -> None:
@@ -140,7 +145,7 @@ class TestProductServiceUnit:
         assert summary.stock_status is StockStatus.OUT_OF_STOCK
 
     def test_identity_outage_is_not_reported_as_an_unverified_merchant(self) -> None:
-        """PermissionError becomes HTTP 403 'your account is not verified'. An outage is not that."""
+        """MerchantMayNotSellError becomes HTTP 403. An outage is not that."""
         repo = FakeProductRepository()
         cat = repo.save_category(Category(id=None, name="Shoes", slug="shoes"))
 
@@ -183,7 +188,7 @@ class TestProductServiceUnit:
             identity_port=identity,
         )
 
-        with pytest.raises(PermissionError, match=expected):
+        with pytest.raises(MerchantMayNotSellError, match=expected):
             service.create_product(merchant_principal_id="3c9a77b1-58de-4a01-8f2e-6d4b19c0a8f3", data={
                 "sku": "SHOES-RUN-42",
                 "title": "Running Shoes 42",
@@ -331,6 +336,90 @@ class TestProductServiceUnit:
         assert weighed is not None and weighed.weight_grams == 1100
         assert retitled is not None and retitled.weight_grams == 1100
 
+
+class TestTheBodyIsCheckedFirst:
+    def _shelved(self) -> FakeProductRepository:
+        repo = FakeProductRepository()
+        repo.save_category(Category(id=None, name="Shoes", slug="shoes"))
+        return repo
+
+    def _offline(self, repo: FakeProductRepository) -> ProductService:
+        return ProductService(
+            product_repo=repo,
+            bin_stock_port=FakeBinStockServicePort(),
+            identity_port=FakeIdentityServicePort(unavailable=True),
+        )
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [("sku", -1), ("title", -1), ("price", "-1"), ("category_id", -1), ("category_id", 999), ("weight_grams", -1)],
+    )
+    def test_a_bad_create_is_a_bad_body_even_while_identity_is_down(self, field: str, value: object) -> None:
+        repo = self._shelved()
+        body: Dict[str, object] = {
+            "sku": "SHOES-1",
+            "title": "Shoes",
+            "price": "1000.00",
+            "category_id": 1,
+            "weight_grams": 250,
+        }
+        body[field] = value
+
+        with pytest.raises(InvalidInputError) as refused:
+            self._offline(repo).create_product(merchant_principal_id="3c9a77b1-58de-4a01-8f2e-6d4b19c0a8f3", data=body)
+
+        assert refused.value.field == field
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [("price", "abc"), ("category_id", 999), ("is_active", "yes"), ("weight_grams", "²")],
+    )
+    def test_a_bad_update_is_a_bad_body_even_while_identity_is_down(self, field: str, value: object) -> None:
+        repo = self._shelved()
+        online = ProductService(product_repo=repo, bin_stock_port=FakeBinStockServicePort(), identity_port=FakeIdentityServicePort())
+        created = online.create_product(
+            merchant_principal_id="3c9a77b1-58de-4a01-8f2e-6d4b19c0a8f3",
+            data={"sku": "SHOES-2", "title": "Shoes", "price": "1000.00", "category_id": 1, "weight_grams": 250},
+        )
+
+        with pytest.raises(InvalidInputError) as refused:
+            self._offline(repo).update_product(created.id or 0, "3c9a77b1-58de-4a01-8f2e-6d4b19c0a8f3", {field: value})
+
+        assert refused.value.field == field
+
+
+class TestASkuIsPermanent:
+    MERCHANT = "3c9a77b1-58de-4a01-8f2e-6d4b19c0a8f3"
+
+    def _created(self, repo: FakeProductRepository) -> Product:
+        repo.save_category(Category(id=None, name="Shoes", slug="shoes"))
+        service = ProductService(product_repo=repo, bin_stock_port=FakeBinStockServicePort(), identity_port=FakeIdentityServicePort())
+        return service.create_product(
+            merchant_principal_id=self.MERCHANT,
+            data={"sku": "SHOES-50", "title": "Shoes", "price": "1000.00", "category_id": 1, "weight_grams": 250},
+        )
+
+    def test_a_sku_cannot_change_once_the_product_exists(self) -> None:
+        repo = FakeProductRepository()
+        created = self._created(repo)
+        service = ProductService(product_repo=repo, bin_stock_port=FakeBinStockServicePort(), identity_port=FakeIdentityServicePort())
+
+        with pytest.raises(InvalidInputError) as refused:
+            service.update_product(created.id or 0, self.MERCHANT, {"sku": "SHOES-51", "title": "Renamed"})
+
+        assert refused.value.field == "sku"
+        assert repo.find_by_id(created.id or 0) == created
+        assert repo.find_by_sku("SHOES-51") is None
+
+    def test_restating_the_same_sku_is_not_a_change(self) -> None:
+        repo = FakeProductRepository()
+        created = self._created(repo)
+        service = ProductService(product_repo=repo, bin_stock_port=FakeBinStockServicePort(), identity_port=FakeIdentityServicePort())
+
+        updated = service.update_product(created.id or 0, self.MERCHANT, {"sku": "SHOES-50", "title": "Renamed"})
+
+        assert updated is not None
+        assert (updated.sku, updated.title) == ("SHOES-50", "Renamed")
 
 class TestStockIsAskedForOnce:
     def _page_of(self, repo: FakeProductRepository, skus: list[str]) -> None:

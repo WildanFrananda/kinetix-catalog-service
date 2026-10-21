@@ -15,6 +15,20 @@ class TestCategoryRulesUnit:
             CategoryService(FakeProductRepository()).create_category(name=name, slug=slug)
         assert refused.value.field == field
 
+    @pytest.mark.parametrize(("name", "slug", "field"), [(None, "shoes", "name"), (12, "shoes", "name"), ("Shoes", None, "slug"), ("Shoes", 7, "slug")])
+    def test_a_name_or_slug_that_is_not_text_is_refused_not_spelled_out(self, name: object, slug: object, field: str) -> None:
+        service = CategoryService(FakeProductRepository())
+        shoes = service.create_category(name="Shoes", slug="shoes")
+
+        with pytest.raises(InvalidInputError) as refused:
+            service.create_category(name=name, slug=slug)
+        assert refused.value.field == field
+
+        with pytest.raises(InvalidInputError) as refused:
+            service.update_category(shoes.id or 0, name=name, slug=slug)
+        assert refused.value.field == field
+        assert service.list_categories() == [shoes]
+
     def test_a_second_category_cannot_take_a_name_or_slug(self) -> None:
         service = CategoryService(FakeProductRepository())
         service.create_category(name="Shoes", slug="shoes")

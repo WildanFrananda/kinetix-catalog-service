@@ -93,9 +93,12 @@ REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
     ],
+    'EXCEPTION_HANDLER': 'core.api.exception_handler.api_exception_handler',
     'UNAUTHENTICATED_USER': None,
     'UNAUTHENTICATED_TOKEN': None,
 }
+
+APPEND_SLASH = False
 
 # Internationalization
 
