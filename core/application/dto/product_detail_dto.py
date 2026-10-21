@@ -10,6 +10,7 @@ class ProductDetailDTO:
     title: str
     description: str
     category: str
+    category_slug: str
     price: Decimal
     currency: str
     image_url: str

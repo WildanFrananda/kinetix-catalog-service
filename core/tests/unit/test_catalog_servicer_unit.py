@@ -9,6 +9,7 @@ from catalog.v1 import catalog_pb2
 from core.domain.entities import Category, Product
 from core.infrastructure.grpc.catalog_servicer import CatalogServicer, MAX_PAGE
 from core.tests.unit.fake_product_repository import FakeProductRepository
+from core.tests.unit.fake_unreadable_product_repository import FakeUnreadableProductRepository
 
 NOON = datetime(2026, 9, 21, 12, 0, 0, tzinfo=timezone.utc)
 CATEGORY = Category(id=1, name="Footwear", slug="footwear")
@@ -193,6 +194,12 @@ class TestPriceConversion:
 
 
 class TestGetProduct:
+    def test_a_catalogue_that_cannot_be_read_is_an_error_not_a_missing_product(self) -> None:
+        servicer = CatalogServicer(FakeUnreadableProductRepository())
+
+        with pytest.raises(RuntimeError):
+            servicer.GetProduct(catalog_pb2.GetProductRequest(sku="SHOE-1"), _ctx(_Context()))
+
     def test_a_missing_product_is_found_false_not_an_error(self) -> None:
         servicer = CatalogServicer(FakeProductRepository())
 

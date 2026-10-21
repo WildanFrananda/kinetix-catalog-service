@@ -39,8 +39,13 @@ kinetix-catalog-service/
 │   │   ├── di.py                       # Dependency Injection Container
 │   │   ├── serializers/                # REST API Serializers
 │   │   └── views/                      # Clean REST Views
-│   │       ├── product_view.py
-│   │       ├── category_view.py
+│   │       ├── public_read_api_view.py
+│   │       ├── product_collection_view.py
+│   │       ├── product_detail_view.py
+│   │       ├── product_create_view.py
+│   │       ├── product_manage_view.py
+│   │       ├── category_collection_view.py
+│   │       ├── category_detail_view.py
 │   │       ├── health_view.py
 │   │       ├── readiness_view.py
 │   │       └── metrics_view.py

@@ -2,7 +2,15 @@ import json
 from typing import Any, Dict, Optional, Tuple
 
 import pytest
-from jwt.exceptions import PyJWKClientConnectionError, PyJWKClientError
+from jwt.exceptions import (
+    DecodeError,
+    ExpiredSignatureError,
+    InvalidAudienceError,
+    InvalidTokenError,
+    PyJWKClientConnectionError,
+    PyJWKClientError,
+    PyJWKSetError,
+)
 from rest_framework.exceptions import AuthenticationFailed
 
 from core.infrastructure.security.identity_keys_unavailable import IdentityKeysUnavailable
@@ -40,11 +48,30 @@ def test_kid_mismatch_is_a_verdict_on_the_token(monkeypatch: pytest.MonkeyPatch)
 @pytest.mark.parametrize(
     "error",
     [
+        ExpiredSignatureError("Signature has expired"),
+        InvalidAudienceError("Audience doesn't match"),
+        DecodeError("Not enough segments"),
+        InvalidTokenError("not an access token"),
+    ],
+)
+def test_a_token_that_does_not_verify_is_a_bad_token(monkeypatch: pytest.MonkeyPatch, error: BaseException) -> None:
+    with pytest.raises(AuthenticationFailed):
+        _authenticate_raising(monkeypatch, error)
+
+
+def test_a_failure_that_is_not_about_the_token_is_not_called_a_bad_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(RuntimeError):
+        _authenticate_raising(monkeypatch, RuntimeError("JWT_ISSUER is required and has no default."))
+
+@pytest.mark.parametrize(
+    "error",
+    [
         PyJWKClientConnectionError("cannot reach the JWKS endpoint"),
         PyJWKClientError("The JWKS endpoint did not return a JSON object"),
         PyJWKClientError("The JWKS endpoint did not contain any signing keys"),
         PyJWKClientError("some failure mode a future PyJWT grows"),
         json.JSONDecodeError("Expecting value", "<html>502 Bad Gateway</html>", 0),
+        PyJWKSetError("The JWK Set did not contain any keys"),
     ],
 )
 def test_identity_being_broken_is_never_reported_as_a_bad_token(

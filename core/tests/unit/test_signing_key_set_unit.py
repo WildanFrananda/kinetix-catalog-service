@@ -6,7 +6,7 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from jwt import PyJWK, PyJWKClient
 from jwt.algorithms import RSAAlgorithm
-from jwt.exceptions import PyJWKClientConnectionError, PyJWKClientError
+from jwt.exceptions import PyJWKClientConnectionError, PyJWKClientError, PyJWKSetError
 
 from core.infrastructure.security.signing_key_set import SigningKeySet
 
@@ -111,3 +111,15 @@ def test_a_token_that_names_no_key_is_refused_without_asking_identity() -> None:
         keys.key_for(token)
 
     assert identity.fetches == 1
+
+
+def test_identity_publishing_an_empty_key_set_is_remembered_as_identity_failing() -> None:
+    client = PyJWKClient("https://identity.invalid/.well-known/jwks.json")
+    object.__setattr__(client, "fetch_data", lambda: {"keys": []})
+    keys = SigningKeySet(client, clock=Clock())
+    token = Identity().sign("k1")
+
+    with pytest.raises(PyJWKSetError):
+        keys.key_for(token)
+    with pytest.raises(PyJWKSetError):
+        keys.key_for(token)

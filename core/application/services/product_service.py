@@ -1,10 +1,11 @@
-from typing import List, Dict, Optional, Any
+from dataclasses import replace
+from typing import List, Dict, Mapping, Optional, TypeVar
 import logging
 from core.domain.repositories import ProductRepository, BinStockServicePort
 from core.domain.repositories.identity_service_port import IdentityServicePort
 from core.application.services.product_field_parser import ProductFieldParser
 from core.domain.entities import Product, Category, StockInfo, StockStatus
-from core.domain.errors import InvalidInputError
+from core.domain.errors import InvalidInputError, MerchantMayNotSellError, ProductNotOwnedError
 from core.application.dto import (
     ProductFilterDTO,
     ProductListResultDTO,
@@ -14,6 +15,8 @@ from core.application.dto import (
 )
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 class ProductService:
     def __init__(
@@ -67,6 +70,7 @@ class ProductService:
                     sku=p.sku,
                     title=p.title,
                     category=p.category.name,
+                    category_slug=p.category.slug,
                     price=p.price,
                     currency=p.currency,
                     image_url=p.image_url,
@@ -111,6 +115,7 @@ class ProductService:
             title=p.title,
             description=p.description,
             category=p.category.name,
+            category_slug=p.category.slug,
             price=p.price,
             currency=p.currency,
             image_url=p.image_url,
@@ -122,21 +127,19 @@ class ProductService:
     def _selling_merchant(self, principal_id: str) -> str:
         info = self._identity_port.get_merchant_info(principal_id)
         if not info:
-            raise PermissionError("identity knows no merchant for this account")
+            raise MerchantMayNotSellError("identity knows no merchant for this account")
 
         if not info.get("may_sell"):
-            raise PermissionError(
+            raise MerchantMayNotSellError(
                 f"identity does not permit this merchant to trade (standing: "
                 f"{info.get('status', 'unknown')})"
             )
 
         return str(info.get("merchant_principal_id") or principal_id)
 
-    def create_product(self, merchant_principal_id: str, data: Dict[str, Any]) -> Product:
-        merchant_principal_id = self._selling_merchant(merchant_principal_id)
-
+    def create_product(self, merchant_principal_id: str, data: Mapping[str, object]) -> Product:
         fields = ProductFieldParser
-        product = Product(
+        draft = Product(
             id=None,
             sku=fields.sku(data.get("sku")),
             title=fields.title(data.get("title")),
@@ -145,13 +148,16 @@ class ProductService:
             currency=fields.currency(data.get("currency")),
             image_url=fields.image_url(data.get("image_url")),
             category=self._category(fields.category_id(data.get("category_id"))),
-            merchant_principal_id=merchant_principal_id,
             is_active=True,
             weight_grams=fields.weight_grams(data.get("weight_grams"))
         )
-        return self._product_repo.save(product)
+        seller = self._selling_merchant(merchant_principal_id)
 
-    def update_product(self, product_id: int, merchant_principal_id: str, data: Dict[str, Any]) -> Optional[Product]:
+        return self._product_repo.save(replace(draft, merchant_principal_id=seller))
+
+    def update_product(self, product_id: int, merchant_principal_id: str, data: Mapping[str, object]) -> Optional[Product]:
+        changes = ProductFieldParser.changes(data)
+        category = None if changes.category_id is None else self._category(changes.category_id)
         merchant_principal_id = self._selling_merchant(merchant_principal_id)
 
         existing = self._product_repo.find_by_id(product_id)
@@ -159,31 +165,23 @@ class ProductService:
             return None
 
         if existing.merchant_principal_id != merchant_principal_id:
-            raise PermissionError("Product does not belong to this merchant")
+            raise ProductNotOwnedError(product_id)
 
-        fields = ProductFieldParser
-        updated = Product(
-            id=existing.id,
-            sku=fields.sku(data["sku"]) if "sku" in data else existing.sku,
-            title=fields.title(data["title"]) if "title" in data else existing.title,
-            description=(
-                fields.description(data["description"]) if "description" in data
-                else existing.description
-            ),
-            price=fields.price(data["price"]) if "price" in data else existing.price,
-            currency=fields.currency(data["currency"]) if "currency" in data else existing.currency,
-            image_url=fields.image_url(data["image_url"]) if "image_url" in data else existing.image_url,
-            category=(
-                self._category(fields.category_id(data["category_id"])) if "category_id" in data
-                else existing.category
-            ),
-            merchant_principal_id=merchant_principal_id,
-            is_active=fields.is_active(data["is_active"]) if "is_active" in data else existing.is_active,
-            weight_grams=(
-                fields.weight_grams(data["weight_grams"]) if "weight_grams" in data
-                else existing.weight_grams
-            )
+        if changes.sku is not None and changes.sku != existing.sku:
+            raise InvalidInputError("sku", "cannot change once the product exists; a new SKU is a new product")
+
+        updated = replace(
+            existing,
+            title=_given(changes.title, existing.title),
+            description=_given(changes.description, existing.description),
+            price=_given(changes.price, existing.price),
+            currency=_given(changes.currency, existing.currency),
+            image_url=_given(changes.image_url, existing.image_url),
+            category=_given(category, existing.category),
+            is_active=_given(changes.is_active, existing.is_active),
+            weight_grams=_given(changes.weight_grams, existing.weight_grams),
         )
+
         return self._product_repo.save(updated)
 
     def delete_product(self, product_id: int, merchant_principal_id: str) -> bool:
@@ -194,7 +192,7 @@ class ProductService:
             return False
 
         if existing.merchant_principal_id != merchant_principal_id:
-            raise PermissionError("Product does not belong to this merchant")
+            raise ProductNotOwnedError(product_id)
 
         return self._product_repo.delete(product_id)
 
@@ -203,6 +201,9 @@ class ProductService:
         if not category:
             raise InvalidInputError("category_id", f"no category {category_id}")
         return category
+
+def _given(change: Optional[T], current: T) -> T:
+    return current if change is None else change
 
 def _merchant_principal_of(product: object) -> str:
     return str(getattr(product, "merchant_principal_id", "") or "")

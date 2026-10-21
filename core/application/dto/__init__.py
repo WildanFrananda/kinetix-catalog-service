@@ -3,6 +3,7 @@ from core.application.dto.product_summary_dto import ProductSummaryDTO
 from core.application.dto.product_detail_dto import ProductDetailDTO
 from core.application.dto.product_list_result_dto import ProductListResultDTO
 from core.application.dto.warehouse_stock_dto import WarehouseStockDTO
+from core.application.dto.product_changes_dto import ProductChangesDTO
 
 __all__ = [
     "ProductFilterDTO",
@@ -10,4 +11,5 @@ __all__ = [
     "ProductDetailDTO",
     "ProductListResultDTO",
     "WarehouseStockDTO",
+    "ProductChangesDTO",
 ]

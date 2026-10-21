@@ -5,7 +5,7 @@ from typing import Callable, Dict, Optional
 
 import jwt
 from jwt import PyJWK, PyJWKClient
-from jwt.exceptions import InvalidTokenError, PyJWKClientError
+from jwt.exceptions import InvalidTokenError, PyJWKClientError, PyJWKSetError
 
 
 class SigningKeySet:
@@ -66,7 +66,7 @@ class SigningKeySet:
 
         try:
             keys = self._client.get_signing_keys(refresh=True)
-        except (PyJWKClientError, json.JSONDecodeError) as error:
+        except (PyJWKClientError, PyJWKSetError, json.JSONDecodeError) as error:
             with self._state:
                 self._last_error = error
             return

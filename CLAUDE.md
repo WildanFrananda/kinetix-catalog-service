@@ -22,7 +22,7 @@ identity's JWKS again only if the last fetch was at least `UNKNOWN_KEY_REFRESH_S
 at a time. PyJWT's `PyJWKClient` fetches on every unknown `kid`, so until 2026-10-19 a stream of forged
 tokens with made-up key ids made identity answer once per request. A fetch that failed is remembered: a
 token whose key is unknown then gets `IdentityKeysUnavailable` (503), never "invalid token", until a later
-fetch succeeds.
+fetch succeeds. A key set with no usable key (`PyJWKSetError`, e.g. `{"keys": []}`) counts as a failed fetch.
 
 ## The change feed reads in commit-safe order
 
@@ -42,3 +42,45 @@ from zero sees the whole catalogue once.
 
 The tests that prove the order run with `django_db(transaction=True)`: rows written inside a test transaction
 that never commits are never below the horizon.
+
+## Every route answers with and without its trailing slash
+
+Kong's catalog routes strip `/api/v1` and send `/api/products…` and `/api/categories…` as the client wrote them, so
+`GET /api/v1/products` arrives as `/api/products`. Django's `APPEND_SLASH` used to answer that with a 301 to
+`/api/products/`, a path Kong does not route, and a redirected POST became a GET. `core/urls.py` now lists every
+route twice, with and without the slash, and `APPEND_SLASH` is off, so catalog never redirects to an upstream path.
+Only the slashed form is named, so `reverse()` keeps answering it. The metrics label tells the two forms apart.
+
+## One error shape
+
+Every refusal is `{"error": CODE, "message": text, "traceId": X-Request-Id or "-"}`, plus `field` for
+`INVALID_INPUT` and `product_count` for `CATEGORY_IN_USE`. Views raise; `core/api/exception_handler.py` maps domain
+errors and DRF's own exceptions (its code upper-cased) to that shape, and anything else to a JSON 500. Django's
+own 400, 404 and 500 (`core/api/error_handlers.py`) use it too, so no answer is HTML.
+
+## Public reads never read the token
+
+`PublicReadApiView` skips authentication on GET, HEAD and OPTIONS. A catalog read answers the same to everyone,
+so a stale token, a forged one, or identity's keys being unreachable cannot turn a product page into a 401 or a
+503. Pricing reads its token, because its answer depends on the caller (an owner sees quota); there an invalid
+token is anonymous and unreachable keys are 503. A write verifies the token as before.
+
+`JWT_ISSUER`, `JWT_AUDIENCE` and `IDENTITY_JWKS_URL` are read when `config/wsgi.py` is imported, so gunicorn's
+worker fails to boot without them. They used to be read on the first authenticated request, and a missing one was
+answered "Invalid token". `manage.py` commands (migrate, grpcserver) do not import `wsgi.py` and do not need them.
+
+## A SKU is permanent, and every SKU can be fetched
+
+An update may restate a product's SKU but not change it (`INVALID_INPUT`, field `sku`). Search indexes and
+pricing promotions are keyed by SKU, and the change feed reports removals only for withdrawn rows, so a renamed
+SKU left the old one behind in both. A new SKU is a new product.
+
+A SKU is refused at create when its product page could not be reached: `create` (the create route), `.` and `..`
+(dot segments, removed by path normalisation), and anything starting with `search` or `suggest`, because Kong's
+search routes are plain string prefixes under `/api/v1/products/`. SKUs created before 2026-10-21 are not checked.
+
+## Text Postgres cannot hold is refused
+
+A NUL character cannot be stored in a Postgres text column, and a query carrying one raised `DataError` (500).
+Every text field, filter and category name refuses it as `INVALID_INPUT`; a SKU path carrying one is not found.
+Whole numbers are ASCII digits only: `str.isdigit()` accepted `²`, which `int()` then refused.

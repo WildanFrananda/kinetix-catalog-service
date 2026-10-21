@@ -1,7 +1,7 @@
-from typing import Dict, Any
+from typing import Dict
 from rest_framework import serializers
 
-class WarehouseStockSerializer(serializers.Serializer[Dict[str, Any]]):
+class WarehouseStockSerializer(serializers.Serializer[Dict[str, object]]):
     sku = serializers.CharField()
     bin_location = serializers.CharField(allow_null=True)
     available_quantity = serializers.IntegerField(allow_null=True)
