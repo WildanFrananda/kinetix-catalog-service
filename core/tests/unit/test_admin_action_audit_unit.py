@@ -13,7 +13,7 @@ _A_WORKER_THAT_LOADED_THE_ROUTES = "import core.api.admin_actions\n"
 
 _A_WORKER_THAT_AUDITED_ONE_DELETE = (
     "import core.api.admin_actions\n"
-    "from core.infrastructure.observability import record_admin_action\n"
+    "from core.infrastructure.observability.admin_action_audit import record_admin_action\n"
     'record_admin_action("admin-1", "catalog.category_delete", "7", "done")\n'
 )
 

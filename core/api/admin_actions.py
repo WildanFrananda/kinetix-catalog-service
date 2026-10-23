@@ -1,4 +1,4 @@
-from core.infrastructure.observability import declare_admin_actions
+from core.infrastructure.observability.admin_action_audit import declare_admin_actions
 
 CATEGORY_CREATE = "catalog.category_create"
 CATEGORY_UPDATE = "catalog.category_update"
