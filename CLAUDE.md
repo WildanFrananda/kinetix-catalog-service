@@ -179,3 +179,14 @@ multiprocess file and `/metrics` merges them.
 A NUL character cannot be stored in a Postgres text column, and a query carrying one raised `DataError` (500).
 Every text field, filter and category name refuses it as `INVALID_INPUT`; a SKU path carrying one is not found.
 Whole numbers are ASCII digits only: `str.isdigit()` accepted `²`, which `int()` then refused.
+
+## The log formatter's imports create no metric
+
+gunicorn applies `logconfig_dict` before its `on_starting` hook makes `PROMETHEUS_MULTIPROC_DIR`, and importing
+`core.infrastructure.observability.json_log_formatter` runs the package's `__init__.py` first. catalog v1.2.0 exported the
+admin audit helpers from that package; they import `core.infrastructure.metrics`, whose metrics open their files in the
+multiprocess directory when they are created, so gunicorn died on its first line with "Unable to configure formatter
+'json'" (2026-10-23, Deploy run 39921518410, rolled back to v1.1.0). The helpers are imported from
+`core.infrastructure.observability.admin_action_audit` directly and the package exports nothing that touches
+`prometheus_client`. `test_gunicorn_log_config_unit.py` applies the logging configuration in a fresh interpreter while the
+directory does not exist yet, and checks that importing the formatter loads no metrics library.

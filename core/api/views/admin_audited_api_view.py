@@ -4,7 +4,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from core.api.views.public_read_api_view import PublicReadApiView
-from core.infrastructure.observability import AdminActionOutcome, record_admin_action
+from core.infrastructure.observability.admin_action_audit import AdminActionOutcome, record_admin_action
 from core.infrastructure.security import Principal
 
 
