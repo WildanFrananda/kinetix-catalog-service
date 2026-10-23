@@ -30,8 +30,12 @@ jobs:
       DB_NAME: kinetix_catalog_dev
       DB_USER: typecheck
       DB_PASSWORD: typecheck
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DB_CONN_MAX_AGE: "60"
       ALLOWED_HOSTS: localhost
       DEBUG: "False"
+      LOG_LEVEL: INFO
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v5
@@ -64,8 +68,10 @@ jobs:
       DB_NAME: kinetix_catalog_dev
       DB_USER: ci
       DB_PASSWORD: ci-ephemeral-not-a-deployed-credential
+      DB_CONN_MAX_AGE: "60"
       ALLOWED_HOSTS: localhost
       DEBUG: "False"
+      LOG_LEVEL: INFO
 
     steps:
       - uses: actions/checkout@v6

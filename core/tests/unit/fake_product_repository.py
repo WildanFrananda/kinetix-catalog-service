@@ -29,6 +29,23 @@ class FakeProductRepository(ProductRepository):
         self.last_page_request = (offset, limit)
         return res[offset : offset + limit], len(res)
 
+    def find_page_of_merchant(
+        self,
+        merchant_principal_id: str,
+        category_slug: Optional[str] = None,
+        search_query: Optional[str] = None,
+        offset: int = 0,
+        limit: int = 10,
+    ) -> Tuple[List[Product], int]:
+        res = [p for p in self._store.values() if p.merchant_principal_id == merchant_principal_id]
+        if category_slug:
+            res = [p for p in res if p.category.slug == category_slug]
+        if search_query:
+            res = [p for p in res if search_query.lower() in p.title.lower()]
+
+        self.last_merchant_page_request = (merchant_principal_id, offset, limit)
+        return res[offset : offset + limit], len(res)
+
     def find_changed_since(
         self,
         updated_through: Optional[datetime] = None,

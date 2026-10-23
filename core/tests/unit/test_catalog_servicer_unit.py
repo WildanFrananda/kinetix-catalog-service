@@ -7,6 +7,7 @@ import pytest
 from catalog.v1 import catalog_pb2
 
 from core.domain.entities import Category, Product
+from core.domain.errors import InvalidInputError
 from core.infrastructure.grpc.catalog_servicer import CatalogServicer, MAX_PAGE
 from core.tests.unit.fake_product_repository import FakeProductRepository
 from core.tests.unit.fake_unreadable_product_repository import FakeUnreadableProductRepository
@@ -20,12 +21,7 @@ def _ctx(context: "_Context") -> grpc.ServicerContext:
 
 
 class _Context:
-    def __init__(self) -> None:
-        self.aborted: Optional[str] = None
-
-    def abort(self, code: object, details: str) -> None:
-        self.aborted = details
-        raise RuntimeError(details)
+    pass
 
 
 def _product(
@@ -172,6 +168,31 @@ class TestChangedAfterATransaction:
         assert not response.next.HasField("transaction_id")
 
 
+class TestACursorCatalogNeverHandsOut:
+    def test_a_last_sku_postgres_cannot_hold_is_refused_before_any_read(self) -> None:
+        repo = _repo_with(_product("SHOE-A", NOON))
+        servicer = CatalogServicer(repo)
+        request = catalog_pb2.ChangedSinceRequest(limit=10)
+        request.cursor.transaction_id = 0
+        request.cursor.last_sku = "SHOE\x00-A"
+
+        with pytest.raises(InvalidInputError) as refused:
+            servicer.ChangedSince(request, _ctx(_Context()))
+
+        assert refused.value.field == "cursor.last_sku"
+        assert repo.last_changed_after is None
+
+    def test_a_time_no_timestamp_can_hold_is_refused(self) -> None:
+        servicer = CatalogServicer(_repo_with(_product("SHOE-A", NOON)))
+        request = catalog_pb2.ChangedSinceRequest(limit=10)
+        request.cursor.updated_through.seconds = 10**12
+
+        with pytest.raises(InvalidInputError) as refused:
+            servicer.ChangedSince(request, _ctx(_Context()))
+
+        assert refused.value.field == "cursor.updated_through"
+
+
 class TestPriceConversion:
     @pytest.mark.parametrize(
         ("rupiah", "sen"),
@@ -220,12 +241,11 @@ class TestGetProduct:
 
     def test_an_empty_sku_is_refused(self) -> None:
         servicer = CatalogServicer(FakeProductRepository())
-        context = _Context()
 
-        with pytest.raises(RuntimeError):
-            servicer.GetProduct(catalog_pb2.GetProductRequest(sku=""), _ctx(context))
+        with pytest.raises(InvalidInputError) as refused:
+            servicer.GetProduct(catalog_pb2.GetProductRequest(sku=""), _ctx(_Context()))
 
-        assert context.aborted == "sku is required"
+        assert (refused.value.field, refused.value.reason) == ("sku", "is required")
 
 
 class TestCountProducts:

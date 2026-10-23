@@ -153,3 +153,101 @@ class TestTheTransactionCursor:
 
         assert after.removed_skus == ["SHOE-GONE"]
         assert after.upserted == []
+
+
+@pytest.mark.django_db(transaction=True)
+class TestACategoryChangeReachesTheFeed:
+    def _caught_up(self, repo: DjangoProductRepository) -> ProductChangePage:
+        page = repo.find_changed_after(0, "", limit=100)
+        assert page.has_more is False
+
+        return page
+
+    def _after(self, repo: DjangoProductRepository, cursor: ProductChangePage) -> ProductChangePage:
+        assert cursor.next_transaction_id is not None
+
+        return repo.find_changed_after(cursor.next_transaction_id, cursor.next_last_sku, limit=100)
+
+    def test_a_new_slug_sends_every_product_filed_under_it_again(self) -> None:
+        repo = DjangoProductRepository()
+        shoes = _category(repo)
+        bags = repo.save_category(Category(id=None, name="Bags", slug="bags"))
+        _save(repo, shoes, "SHOE-1")
+        _save(repo, shoes, "SHOE-2")
+        _save(repo, bags, "BAG-1")
+        caught_up = self._caught_up(repo)
+
+        repo.save_category(replace(shoes, slug="sneakers"))
+
+        after = self._after(repo, caught_up)
+        assert [p.sku for p in after.upserted] == ["SHOE-1", "SHOE-2"]
+        assert {p.category.slug for p in after.upserted} == {"sneakers"}
+        assert after.next_transaction_id is not None and caught_up.next_transaction_id is not None
+        assert after.next_transaction_id > caught_up.next_transaction_id
+
+    def test_a_new_name_sends_them_again_too(self) -> None:
+        repo = DjangoProductRepository()
+        shoes = _category(repo)
+        _save(repo, shoes, "SHOE-1")
+        caught_up = self._caught_up(repo)
+
+        repo.save_category(replace(shoes, name="Sneakers"))
+
+        after = self._after(repo, caught_up)
+        assert [p.category.name for p in after.upserted] == ["Sneakers"]
+
+    def test_a_withdrawn_product_under_a_renamed_category_is_reported_removed_again(self) -> None:
+        repo = DjangoProductRepository()
+        shoes = _category(repo)
+        gone = _save(repo, shoes, "SHOE-GONE")
+        assert gone.id is not None
+        repo.delete(gone.id)
+        caught_up = self._caught_up(repo)
+
+        repo.save_category(replace(shoes, slug="sneakers"))
+
+        after = self._after(repo, caught_up)
+        assert after.removed_skus == ["SHOE-GONE"]
+        assert after.upserted == []
+
+    def test_a_category_saved_unchanged_sends_nothing(self) -> None:
+        repo = DjangoProductRepository()
+        shoes = _category(repo)
+        _save(repo, shoes, "SHOE-1")
+        caught_up = self._caught_up(repo)
+
+        repo.save_category(shoes)
+
+        after = self._after(repo, caught_up)
+        assert after.upserted == [] and after.removed_skus == []
+
+    def test_the_products_are_stamped_by_the_transaction_that_renamed_the_category(self) -> None:
+        repo = DjangoProductRepository()
+        shoes = _category(repo)
+        _save(repo, shoes, "SHOE-1")
+
+        with transaction.atomic():
+            repo.save_category(replace(shoes, slug="sneakers"))
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT change_transaction_id = pg_current_xact_id() FROM products WHERE sku = %s",
+                    ["SHOE-1"],
+                )
+                stamped = cursor.fetchone()
+
+        assert stamped == (True,)
+
+    def test_a_rename_rolled_back_leaves_the_products_as_they_were(self) -> None:
+        repo = DjangoProductRepository()
+        shoes = _category(repo)
+        _save(repo, shoes, "SHOE-1")
+        caught_up = self._caught_up(repo)
+
+        with pytest.raises(RuntimeError):
+            with transaction.atomic():
+                repo.save_category(replace(shoes, slug="sneakers"))
+                raise RuntimeError("the admin's request failed after the rename")
+
+        after = self._after(repo, caught_up)
+        assert after.upserted == []
+        assert repo.find_category_by_id(shoes.id or 0) == shoes

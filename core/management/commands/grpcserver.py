@@ -1,24 +1,13 @@
 import logging
 import signal
-from concurrent import futures
 from types import FrameType
 from typing import Any, Optional
 
-import grpc
-from catalog.v1 import catalog_pb2, catalog_pb2_grpc
 from django.core.management.base import BaseCommand
-from grpc_health.v1 import health, health_pb2, health_pb2_grpc
-from grpc_reflection.v1alpha import reflection
+from grpc_health.v1 import health, health_pb2
 
-from core.infrastructure.grpc.catalog_servicer import CatalogServicer
-from core.infrastructure.grpc.database_connection_interceptor import (
-    DatabaseConnectionInterceptor,
-)
-from core.infrastructure.repositories import DjangoProductRepository
+from core.infrastructure.grpc.catalog_grpc_server import CATALOG_SERVICE_NAME, catalog_grpc_server
 from core.infrastructure.security.allowed_peers import allowed_peers
-from core.infrastructure.security.peer_authorization_interceptor import (
-    PeerAuthorizationInterceptor,
-)
 from core.infrastructure.security.server_credentials import server_credentials
 
 logger = logging.getLogger(__name__)
@@ -44,43 +33,16 @@ class Command(BaseCommand):
         workers: int = options["workers"]
 
         peers = allowed_peers()
-
-        server = grpc.server(
-            futures.ThreadPoolExecutor(max_workers=workers),
-            interceptors=[
-                PeerAuthorizationInterceptor(peers),
-                DatabaseConnectionInterceptor(),
-            ],
-        )
-
-        catalog_pb2_grpc.add_CatalogServiceServicer_to_server(
-            CatalogServicer(DjangoProductRepository()), server
-        )
-
         health_servicer = health.HealthServicer()
-        health_pb2_grpc.add_HealthServicer_to_server(health_servicer, server)
+        server = catalog_grpc_server(peers, workers, health_servicer)
 
-        reflection.enable_server_reflection(
-            (
-                catalog_pb2.DESCRIPTOR.services_by_name["CatalogService"].full_name,
-                health.SERVICE_NAME,
-                reflection.SERVICE_NAME,
-            ),
-            server,
-        )
-
-        bound = server.add_secure_port(
-            f"0.0.0.0:{port}", server_credentials(options["pki_dir"])
-        )
+        bound = server.add_secure_port(f"0.0.0.0:{port}", server_credentials(options["pki_dir"]))
         if bound == 0:
             raise RuntimeError(f"could not bind port {port}")
 
         server.start()
         health_servicer.set("", health_pb2.HealthCheckResponse.SERVING)
-        health_servicer.set(
-            catalog_pb2.DESCRIPTOR.services_by_name["CatalogService"].full_name,
-            health_pb2.HealthCheckResponse.SERVING,
-        )
+        health_servicer.set(CATALOG_SERVICE_NAME, health_pb2.HealthCheckResponse.SERVING)
         logger.info(
             "catalog gRPC serving on %s with mTLS required; callers allowed: %s",
             bound,

@@ -2,13 +2,16 @@ from datetime import datetime
 from typing import Optional, List, Tuple
 from decimal import Decimal
 from django.db import IntegrityError, transaction
-from django.db.models import BooleanField, ProtectedError, Q
+from django.db.models import BooleanField, ProtectedError, Q, QuerySet
 from django.db.models.expressions import RawSQL
 from django.utils import timezone
 from core.domain.entities import Product, Category, ProductChangePage
 from core.domain.errors import CategoryInUseError, CategoryTakenError, SkuTakenError
 from core.domain.repositories import ProductRepository
 from core.infrastructure.models import ProductModel, CategoryModel
+
+_NEWEST_FIRST = ("-created_at", "-id")
+
 
 class DjangoProductRepository(ProductRepository):
     def find_page(
@@ -18,7 +21,30 @@ class DjangoProductRepository(ProductRepository):
         offset: int = 0,
         limit: int = 10,
     ) -> Tuple[List[Product], int]:
-        qs = ProductModel.objects.select_related("category").filter(is_active=True)
+        qs = ProductModel.objects.filter(is_active=True)
+
+        return self._page(qs, category_slug, search_query, offset, limit)
+
+    def find_page_of_merchant(
+        self,
+        merchant_principal_id: str,
+        category_slug: Optional[str] = None,
+        search_query: Optional[str] = None,
+        offset: int = 0,
+        limit: int = 10,
+    ) -> Tuple[List[Product], int]:
+        qs = ProductModel.objects.filter(merchant_principal_id=merchant_principal_id)
+
+        return self._page(qs, category_slug, search_query, offset, limit)
+
+    def _page(
+        self,
+        qs: QuerySet[ProductModel],
+        category_slug: Optional[str],
+        search_query: Optional[str],
+        offset: int,
+        limit: int,
+    ) -> Tuple[List[Product], int]:
         if category_slug:
             qs = qs.filter(category__slug=category_slug)
         if search_query:
@@ -26,7 +52,8 @@ class DjangoProductRepository(ProductRepository):
 
         total = qs.count()
 
-        page = [self._to_domain_entity(orm_p) for orm_p in qs[offset : offset + limit]]
+        rows = qs.select_related("category").order_by(*_NEWEST_FIRST)[offset : offset + limit]
+        page = [self._to_domain_entity(orm_p) for orm_p in rows]
 
         return page, total
 

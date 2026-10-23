@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import List
 
@@ -6,6 +7,7 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 
 from core.domain.entities import Category, Product
+from core.infrastructure.models import ProductModel
 from core.infrastructure.repositories import DjangoProductRepository
 
 
@@ -139,3 +141,68 @@ class TestProductPagingHappensInTheDatabase:
 
         assert total == 3
         assert "SHOE-001" not in [p.sku for p in page]
+
+    def test_products_written_at_the_same_instant_keep_one_order_across_pages(self) -> None:
+        repo = DjangoProductRepository()
+        _make_products(repo, 7)
+        ProductModel.objects.update(created_at=datetime(2026, 10, 22, tzinfo=timezone.utc))
+
+        with CaptureQueriesContext(connection) as captured:
+            walked = [p.sku for offset in range(0, 7, 2) for p in repo.find_page(offset=offset, limit=2)[0]]
+
+        assert walked == [f"SHOE-{n:03d}" for n in range(6, -1, -1)]
+        fetches = [q["sql"] for q in captured.captured_queries if "COUNT(" not in q["sql"].upper()]
+        assert all('"products"."id" DESC' in sql for sql in fetches), (
+            "a page ordered by created_at alone has no unique order: rows written at the same instant can "
+            "appear on two pages or on none"
+        )
+
+
+@pytest.mark.django_db
+class TestASellersPage:
+    def test_holds_the_sellers_products_withdrawn_included_and_only_theirs(self) -> None:
+        repo = DjangoProductRepository()
+        cat = _make_products(repo, 3)
+        withdrawn = repo.find_by_sku("SHOE-001")
+        assert withdrawn is not None and withdrawn.id is not None
+        repo.delete(withdrawn.id)
+        repo.save(
+            Product(
+                id=None,
+                sku="RIVAL-001",
+                title="Rival shoes",
+                description="",
+                price=Decimal("1.00"),
+                currency="IDR",
+                image_url="",
+                category=cat,
+                merchant_principal_id="shop-2",
+            )
+        )
+
+        page, total = repo.find_page_of_merchant("shop-1", offset=0, limit=10)
+
+        assert total == 3
+        assert [(p.sku, p.is_active) for p in page] == [
+            ("SHOE-002", True),
+            ("SHOE-001", False),
+            ("SHOE-000", True),
+        ]
+
+    def test_is_limited_and_counted_by_sql_and_filtered_like_the_public_page(self) -> None:
+        repo = DjangoProductRepository()
+        _make_products(repo, 25)
+
+        with CaptureQueriesContext(connection) as captured:
+            page, total = repo.find_page_of_merchant("shop-1", search_query="00", offset=5, limit=3)
+
+        assert total == 10
+        assert [p.sku for p in page] == ["SHOE-004", "SHOE-003", "SHOE-002"]
+        fetches = [q["sql"] for q in captured.captured_queries if "COUNT(" not in q["sql"].upper()]
+        assert len(fetches) == 1 and "LIMIT 3" in fetches[0].upper()
+
+    def test_a_merchant_with_no_products_has_an_empty_page(self) -> None:
+        repo = DjangoProductRepository()
+        _make_products(repo, 2)
+
+        assert repo.find_page_of_merchant("shop-9", offset=0, limit=10) == ([], 0)

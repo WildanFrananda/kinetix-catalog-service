@@ -1,4 +1,5 @@
 from core.infrastructure.metrics.contract_metrics import (
+    ADMIN_ACTIONS_TOTAL,
     BUILD_INFO,
     GRPC_CLIENT_CALLS_TOTAL,
     HTTP_REQUEST_DURATION_SECONDS,
@@ -17,6 +18,7 @@ from core.infrastructure.metrics.render_metrics import MULTIPROCESS_DIR_ENV, ren
 from core.infrastructure.metrics.route_template import UNMATCHED_ROUTE, route_template
 
 __all__ = [
+    "ADMIN_ACTIONS_TOTAL",
     "BUILD_INFO",
     "GRPC_CLIENT_CALLS_TOTAL",
     "HTTP_REQUESTS_TOTAL",

@@ -3,6 +3,7 @@ from typing import Callable, Optional
 
 from django.http import HttpRequest, HttpResponse
 
+from core.infrastructure.observability.accepted_request_id import accepted_request_id
 from core.infrastructure.observability.request_id_context import (
     reset_request_id,
     set_request_id,
@@ -19,7 +20,7 @@ class RequestIdMiddleware:
         self._get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
-        request_id: Optional[str] = request.META.get(_META_KEY) or None
+        request_id: Optional[str] = accepted_request_id(request.META.get(_META_KEY))
         token = set_request_id(request_id)
 
         try:

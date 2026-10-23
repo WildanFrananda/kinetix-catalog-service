@@ -23,8 +23,9 @@ a password. Both are gone. (docs/BOUNDARY-DEBT.md C1, C3, C5, C10)
 
 **Kept from the earlier audit work:**
 
-1. **Fail-fast secret validation**: `config/settings.py` demands an explicit `SECRET_KEY` of at least
-   32 characters outside DEBUG, failing at boot rather than serving with a default.
+1. **Fail-fast settings**: `config/settings.py` demands every setting from the environment (a `SECRET_KEY`
+   of at least 32 characters, the database, `DEBUG`, `ALLOWED_HOSTS`, `LOG_LEVEL`; `.env.example` lists them),
+   failing at boot rather than serving with a default.
 2. **Parallel stock reads with channel reuse**: `ProductService.list_products` queries stock
    concurrently, and `BinStockGrpcClient` reuses its gRPC channel across requests.
 

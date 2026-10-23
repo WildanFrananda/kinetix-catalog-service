@@ -43,6 +43,12 @@ GRPC_CLIENT_CALLS_TOTAL = Counter(
     ["peer", "grpc_method", "grpc_code"],
 )
 
+ADMIN_ACTIONS_TOTAL = Counter(
+    "kinetix_admin_actions_total",
+    "Decisions on requests only an admin may make, by action and outcome (done, refused, failed).",
+    ["action", "outcome"],
+)
+
 BUILD_INFO = Gauge(
     BUILD_INFO_NAME,
     "Always 1. The labels say which service and which build answered the scrape.",
