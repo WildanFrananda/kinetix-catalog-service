@@ -53,8 +53,12 @@ typecheck:
     DB_NAME: kinetix_catalog_dev
     DB_USER: typecheck
     DB_PASSWORD: typecheck
+    DB_HOST: localhost
+    DB_PORT: "5432"
+    DB_CONN_MAX_AGE: "60"
     ALLOWED_HOSTS: localhost
     DEBUG: "False"
+    LOG_LEVEL: INFO
   script:
     - mypy --config-file mypy.ini core config
   rules:
@@ -78,8 +82,10 @@ pytest:
     DB_NAME: kinetix_catalog_dev
     DB_USER: ci
     DB_PASSWORD: ci-ephemeral-not-a-deployed-credential
+    DB_CONN_MAX_AGE: "60"
     ALLOWED_HOSTS: localhost
     DEBUG: "False"
+    LOG_LEVEL: INFO
   script:
     - python manage.py migrate --noinput
     # `--check` fails when the models have drifted ahead of the migrations, which is exactly

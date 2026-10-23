@@ -7,7 +7,7 @@ from core.application.dto import ProductChangesDTO
 from core.domain.errors import InvalidInputError
 
 _SKU = re.compile(r"^[^\s/]{1,64}$")
-_ROUTE_NAMES = frozenset({"create", ".", ".."})
+_ROUTE_NAMES = frozenset({"create", "mine", ".", ".."})
 _ROUTED_ELSEWHERE = ("search", "suggest")
 _WHOLE_NUMBER = re.compile(r"[0-9]{1,19}")
 _LARGEST_ID = 9_223_372_036_854_775_807
@@ -29,7 +29,7 @@ class ProductFieldParser:
         if text in _ROUTE_NAMES or text.startswith(_ROUTED_ELSEWHERE):
             raise InvalidInputError(
                 "sku",
-                "must not be create, . or .., nor start with search or suggest: its product page could not be reached",
+                "must not be create, mine, . or .., nor start with search or suggest: its product page could not be reached",
             )
         return text
 
@@ -62,10 +62,10 @@ class ProductFieldParser:
             raise InvalidInputError("price", "must be a finite number")
         if amount <= 0:
             raise InvalidInputError("price", "must be more than zero")
-        if amount != amount.quantize(_CENT):
-            raise InvalidInputError("price", "must have at most two decimal places")
         if amount > _LARGEST_PRICE:
             raise InvalidInputError("price", f"must be at most {_LARGEST_PRICE}")
+        if amount != amount.quantize(_CENT):
+            raise InvalidInputError("price", "must have at most two decimal places")
         return amount.quantize(_CENT)
 
     @staticmethod

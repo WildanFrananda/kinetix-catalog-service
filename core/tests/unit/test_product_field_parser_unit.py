@@ -18,6 +18,15 @@ class TestProductFieldParserUnit:
         assert refused.value.field == "price"
 
     @pytest.mark.parametrize(
+        "value",
+        ["1e26", "1E+30", "99999999999999999999999999999", "1e26.5", 10**30, "1e999999", "123456789012345678901234567.5"],
+    )
+    def test_a_price_too_large_to_round_to_the_cent_is_refused_not_raised(self, value: object) -> None:
+        with pytest.raises(InvalidInputError) as refused:
+            ProductFieldParser.price(value)
+        assert refused.value.field == "price"
+
+    @pytest.mark.parametrize(
         ("value", "stored"),
         [("189000", Decimal("189000.00")), (189000.5, Decimal("189000.50")), ("0.01", Decimal("0.01"))],
     )
@@ -49,13 +58,13 @@ class TestProductFieldParserUnit:
             ProductFieldParser.sku(value)
         assert refused.value.field == "sku"
 
-    @pytest.mark.parametrize("value", ["create", ".", "..", "search", "search-1", "searchlight", "suggest", "suggest-2"])
+    @pytest.mark.parametrize("value", ["create", "mine", ".", "..", "search", "search-1", "searchlight", "suggest", "suggest-2"])
     def test_a_sku_its_own_product_page_could_not_reach_is_refused(self, value: str) -> None:
         with pytest.raises(InvalidInputError) as refused:
             ProductFieldParser.sku(value)
         assert refused.value.field == "sku"
 
-    @pytest.mark.parametrize("value", ["SHOE-1", "creates", "manage", "Search-1", "research", "x.y", "..."])
+    @pytest.mark.parametrize("value", ["SHOE-1", "creates", "manage", "mines", "Mine", "Search-1", "research", "x.y", "..."])
     def test_a_sku_that_only_resembles_a_route_is_kept(self, value: str) -> None:
         assert ProductFieldParser.sku(value) == value
 

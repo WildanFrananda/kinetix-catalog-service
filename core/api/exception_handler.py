@@ -2,6 +2,8 @@ import logging
 from http import HTTPStatus
 from typing import Dict, Optional
 
+from django.conf import settings
+from django.core.exceptions import RequestDataTooBig, TooManyFieldsSent
 from rest_framework import status
 from rest_framework.exceptions import APIException, ErrorDetail
 from rest_framework.response import Response
@@ -17,6 +19,7 @@ from core.domain.errors import (
     ProductNotOwnedError,
     SkuTakenError,
 )
+from core.infrastructure.resilience import is_database_unavailable
 
 logger = logging.getLogger(__name__)
 
@@ -25,12 +28,25 @@ _IDENTITY_UNAVAILABLE_MESSAGE = (
     "applied. Nothing was created, changed or deleted."
 )
 _IDENTITY_RETRY_AFTER_SECONDS = "15"
+_DATABASE_UNAVAILABLE_MESSAGE = (
+    "the catalogue could not reach its database, so this request could not be answered. "
+    "Try again shortly."
+)
+_DATABASE_RETRY_AFTER_SECONDS = "15"
+_BODY_TOO_LARGE_MESSAGE = (
+    f"the request body is larger than {settings.DATA_UPLOAD_MAX_MEMORY_SIZE} bytes, so it was not read"
+)
+_TOO_MANY_FIELDS_MESSAGE = (
+    f"this request carries more than {settings.DATA_UPLOAD_MAX_NUMBER_FIELDS} query or form "
+    "fields, so it was not read"
+)
 
 
 def api_exception_handler(exc: Exception, context: Dict[str, object]) -> Response:
-    refusal = _domain_refusal(exc)
-    if refusal is not None:
-        return refusal
+    for answer_to in (_domain_refusal, _unreadable_request, _database_unavailable):
+        refusal = answer_to(exc)
+        if refusal is not None:
+            return refusal
 
     response = drf_exception_handler(exc, context)
     if response is not None:
@@ -80,6 +96,32 @@ def _domain_refusal(exc: Exception) -> Optional[Response]:
     return None
 
 
+def _unreadable_request(exc: Exception) -> Optional[Response]:
+    if isinstance(exc, RequestDataTooBig):
+        return Response(
+            error_body("BODY_TOO_LARGE", _BODY_TOO_LARGE_MESSAGE),
+            status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+        )
+
+    if isinstance(exc, TooManyFieldsSent):
+        return Response(error_body("TOO_MANY_FIELDS", _TOO_MANY_FIELDS_MESSAGE), status=status.HTTP_400_BAD_REQUEST)
+
+    return None
+
+
+def _database_unavailable(exc: Exception) -> Optional[Response]:
+    if not is_database_unavailable(exc):
+        return None
+
+    logger.error("the database could not be reached: %s", exc)
+
+    return Response(
+        error_body("DATABASE_UNAVAILABLE", _DATABASE_UNAVAILABLE_MESSAGE),
+        status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        headers={"Retry-After": _DATABASE_RETRY_AFTER_SECONDS},
+    )
+
+
 def _framework_refusal(exc: Exception, response: Response) -> Dict[str, object]:
     detail = exc.detail if isinstance(exc, APIException) else None
     if isinstance(detail, ErrorDetail) and detail.code:
@@ -87,4 +129,4 @@ def _framework_refusal(exc: Exception, response: Response) -> Dict[str, object]:
 
     answer = HTTPStatus(response.status_code)
 
-    return error_body(answer.name, answer.phrase, {"details": response.data})
+    return error_body(answer.name, answer.phrase)

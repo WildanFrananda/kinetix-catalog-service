@@ -7,6 +7,7 @@ from core.application.services.product_field_parser import ProductFieldParser
 from core.domain.entities import Product, Category, StockInfo, StockStatus
 from core.domain.errors import InvalidInputError, MerchantMayNotSellError, ProductNotOwnedError
 from core.application.dto import (
+    MerchantProductListResultDTO,
     ProductFilterDTO,
     ProductListResultDTO,
     ProductSummaryDTO,
@@ -87,6 +88,26 @@ class ProductService:
             page=page_number,
             page_size=filter_dto.page_size,
             results=summaries
+        )
+
+    def list_merchant_products(
+        self,
+        merchant_principal_id: str,
+        filter_dto: ProductFilterDTO,
+    ) -> MerchantProductListResultDTO:
+        products, total_count = self._product_repo.find_page_of_merchant(
+            merchant_principal_id=merchant_principal_id,
+            category_slug=filter_dto.category_slug,
+            search_query=filter_dto.search_query,
+            offset=(filter_dto.page - 1) * filter_dto.page_size,
+            limit=filter_dto.page_size,
+        )
+
+        return MerchantProductListResultDTO(
+            count=total_count,
+            page=filter_dto.page,
+            page_size=filter_dto.page_size,
+            results=products,
         )
 
     def get_product_detail(self, sku: str) -> Optional[ProductDetailDTO]:

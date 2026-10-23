@@ -1,4 +1,3 @@
-import logging
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Optional
@@ -9,12 +8,13 @@ from common.v1 import common_pb2
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from core.domain.entities import Product
+from core.domain.errors import InvalidInputError
 from core.domain.repositories import ProductRepository
-
-logger = logging.getLogger(__name__)
 
 MAX_PAGE = 500
 DEFAULT_PAGE = 100
+_NUL = "\x00"
+
 
 class CatalogServicer(catalog_pb2_grpc.CatalogServiceServicer):  # type: ignore[misc]
     def __init__(self, product_repo: ProductRepository) -> None:
@@ -29,6 +29,9 @@ class CatalogServicer(catalog_pb2_grpc.CatalogServiceServicer):  # type: ignore[
         limit = min(limit, MAX_PAGE)
 
         cursor = request.cursor
+        if _NUL in cursor.last_sku:
+            raise InvalidInputError("cursor.last_sku", "must not contain a NUL character")
+
         if cursor.HasField("transaction_id"):
             page = self._product_repo.find_changed_after(
                 transaction_id=cursor.transaction_id,
@@ -61,7 +64,7 @@ class CatalogServicer(catalog_pb2_grpc.CatalogServiceServicer):  # type: ignore[
         context: grpc.ServicerContext,
     ) -> catalog_pb2.GetProductResponse:
         if not request.sku:
-            context.abort(grpc.StatusCode.INVALID_ARGUMENT, "sku is required")
+            raise InvalidInputError("sku", "is required")
 
         product = self._product_repo.find_by_sku(request.sku)
         if product is None:
@@ -82,7 +85,11 @@ class CatalogServicer(catalog_pb2_grpc.CatalogServiceServicer):  # type: ignore[
 def _from_proto_time(value: Timestamp) -> Optional[datetime]:
     if value.seconds == 0 and value.nanos == 0:
         return None
-    return value.ToDatetime(tzinfo=timezone.utc)
+
+    try:
+        return value.ToDatetime(tzinfo=timezone.utc)
+    except ValueError as error:
+        raise InvalidInputError("cursor.updated_through", "is outside the range of a timestamp") from error
 
 
 def _to_proto_product(product: Product) -> catalog_pb2.Product:

@@ -2,6 +2,7 @@ from django.urls import path
 from core.api.views import (
     CategoryCollectionView,
     CategoryDetailView,
+    MerchantProductCollectionView,
     ProductCollectionView,
     ProductCreateView,
     ProductDetailView,
@@ -17,6 +18,8 @@ urlpatterns = [
     path("products/", ProductCollectionView.as_view(), name="product-list"),
     path("products/create", ProductCreateView.as_view()),
     path("products/create/", ProductCreateView.as_view(), name="product-create"),
+    path("products/mine", MerchantProductCollectionView.as_view()),
+    path("products/mine/", MerchantProductCollectionView.as_view(), name="product-mine"),
     path("products/manage/<int:product_id>", ProductManageView.as_view()),
     path("products/manage/<int:product_id>/", ProductManageView.as_view(), name="product-manage"),
     path("products/<str:sku>", ProductDetailView.as_view()),

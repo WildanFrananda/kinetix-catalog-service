@@ -13,6 +13,7 @@ from core.api.serializers.product_list_response_serializer import ProductListRes
 from core.api.serializers.warehouse_stock_serializer import WarehouseStockSerializer
 from core.api.serializers.product_detail_serializer import ProductDetailSerializer
 from core.api.serializers.product_record_serializer import ProductRecordSerializer
+from core.api.serializers.merchant_product_list_response_serializer import MerchantProductListResponseSerializer
 from core.api.serializers.category_serializer import CategorySerializer
 
 __all__ = [
@@ -21,5 +22,6 @@ __all__ = [
     "WarehouseStockSerializer",
     "ProductDetailSerializer",
     "ProductRecordSerializer",
+    "MerchantProductListResponseSerializer",
     "CategorySerializer",
 ]

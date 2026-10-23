@@ -14,7 +14,18 @@ class ProductRepository(ABC):
         offset: int = 0,
         limit: int = 10,
     ) -> Tuple[List[Product], int]:
-        """One page of products, and how many match the filter in total."""
+        """One page of products on sale, newest first, and how many match the filter in total."""
+
+    @abstractmethod
+    def find_page_of_merchant(
+        self,
+        merchant_principal_id: str,
+        category_slug: Optional[str] = None,
+        search_query: Optional[str] = None,
+        offset: int = 0,
+        limit: int = 10,
+    ) -> Tuple[List[Product], int]:
+        """One page of a merchant's products, withdrawn ones included, newest first, and how many match."""
 
     @abstractmethod
     def find_changed_since(

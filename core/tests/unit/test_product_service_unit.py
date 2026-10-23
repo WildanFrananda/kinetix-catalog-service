@@ -475,3 +475,36 @@ class TestStockIsAskedForOnce:
                 "an unanswered warehouse is not a shop with nothing in it"
             )
             assert summary.is_in_stock is None
+
+
+class TestASellersOwnProducts:
+    def _product(self, sku: str, merchant: str, is_active: bool = True) -> Product:
+        return Product(
+            id=None,
+            sku=sku,
+            title=f"Shoe {sku}",
+            description="",
+            price=Decimal("100.00"),
+            currency="IDR",
+            image_url="",
+            category=Category(id=1, name="Shoes", slug="shoes"),
+            merchant_principal_id=merchant,
+            is_active=is_active,
+        )
+
+    def test_is_one_page_of_the_callers_records_withdrawn_ones_included(self) -> None:
+        repo = FakeProductRepository()
+        repo.save(self._product("SHOE-1", "seller-1"))
+        repo.save(self._product("SHOE-2", "seller-1", is_active=False))
+        repo.save(self._product("RIVAL-1", "rival-1"))
+        service = ProductService(
+            product_repo=repo,
+            bin_stock_port=FakeUnreachableBinStockServicePort(),
+            identity_port=FakeIdentityServicePort(unavailable=True),
+        )
+
+        page = service.list_merchant_products("seller-1", ProductFilterDTO(page=2, page_size=1))
+
+        assert (page.count, page.page, page.page_size) == (2, 2, 1)
+        assert [(p.sku, p.is_active) for p in page.results] == [("SHOE-2", False)]
+        assert repo.last_merchant_page_request == ("seller-1", 1, 1)

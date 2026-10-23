@@ -5,16 +5,17 @@ from rest_framework.exceptions import NotFound
 from rest_framework.request import Request
 from rest_framework.response import Response
 
+from core.api.admin_actions import CATEGORY_DELETE, CATEGORY_UPDATE
 from core.api.caller import category_manager
 from core.api.di import get_category_service
 from core.api.request_body import json_object
 from core.api.serializers import CategorySerializer
-from core.api.views.public_read_api_view import PublicReadApiView
+from core.api.views.admin_audited_api_view import AdminAuditedApiView
 
 _NOT_FOUND = "no category with this id"
 
 
-class CategoryDetailView(PublicReadApiView):
+class CategoryDetailView(AdminAuditedApiView):
     def get(self, request: Request, category_id: int) -> Response:
         category = get_category_service().get_category_by_id(category_id)
         if category is None:
@@ -23,7 +24,7 @@ class CategoryDetailView(PublicReadApiView):
         return Response(CategorySerializer(asdict(category)).data, status=status.HTTP_200_OK)
 
     def put(self, request: Request, category_id: int) -> Response:
-        category_manager(request)
+        self.begin_admin_action(CATEGORY_UPDATE, category_manager(request))
         body = json_object(request)
         category = get_category_service().update_category(
             category_id=category_id,
@@ -36,7 +37,7 @@ class CategoryDetailView(PublicReadApiView):
         return Response(CategorySerializer(asdict(category)).data, status=status.HTTP_200_OK)
 
     def delete(self, request: Request, category_id: int) -> Response:
-        category_manager(request)
+        self.begin_admin_action(CATEGORY_DELETE, category_manager(request))
         deleted = get_category_service().delete_category(category_id)
         if not deleted:
             raise NotFound(_NOT_FOUND, code="category_not_found")

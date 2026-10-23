@@ -7,7 +7,11 @@ from typing import Protocol  # noqa: E402
 
 from prometheus_client import multiprocess  # noqa: E402
 
-_LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+_LOG_LEVEL_SETTING = os.environ.get("LOG_LEVEL")
+if not _LOG_LEVEL_SETTING:
+    raise RuntimeError("LOG_LEVEL is required and has no default. Set it in the environment.")
+
+_LOG_LEVEL = _LOG_LEVEL_SETTING.upper()
 
 graceful_timeout = 25
 

@@ -12,6 +12,8 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 import os
 from pathlib import Path
+from typing import List
+
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -22,24 +24,41 @@ load_dotenv(BASE_DIR / ".env")
 
 
 def _require_env(name: str) -> str:
-    """Read a required secret. Missing means stop, never fall back to a committed value."""
+    """Read a required setting. Missing means stop, never fall back to a committed value."""
     value = os.environ.get(name)
     if not value:
         raise ValueError(f"{name} is required and has no default. Set it in the environment.")
     return value
 
-DEBUG = os.environ.get("DEBUG", "False").lower() in ("true", "1", "yes")
 
-SECRET_KEY = os.environ.get("SECRET_KEY")
-if not SECRET_KEY:
-    raise ValueError("SECRET_KEY is required and has no default. Set it in the environment.")
+def _require_whole_number(name: str) -> int:
+    value = _require_env(name)
+    if not (value.isascii() and value.isdigit()):
+        raise ValueError(f"{name} must be a whole number written in ASCII digits.")
+
+    return int(value)
+
+
+def _require_flag(name: str) -> bool:
+    value = _require_env(name).lower()
+    if value in ("true", "1", "yes"):
+        return True
+
+    if value in ("false", "0", "no"):
+        return False
+
+    raise ValueError(f"{name} must be true or false.")
+
+
+DEBUG = _require_flag("DEBUG")
+
+SECRET_KEY = _require_env("SECRET_KEY")
 if len(SECRET_KEY) < 32:
     raise ValueError("SECRET_KEY must be at least 32 characters.")
 
-raw_hosts = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1" if DEBUG else "")
-ALLOWED_HOSTS: list[str] = [h.strip() for h in raw_hosts.split(",") if h.strip()]
+ALLOWED_HOSTS: List[str] = [h.strip() for h in _require_env("ALLOWED_HOSTS").split(",") if h.strip()]
 if not ALLOWED_HOSTS:
-    raise ValueError("ALLOWED_HOSTS is required when DEBUG is off. Set it to the hostnames this service serves.")
+    raise ValueError("ALLOWED_HOSTS must name at least one hostname this service serves.")
 
 # Application definition
 
@@ -79,12 +98,12 @@ WSGI_APPLICATION = 'config.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get("DB_NAME", "kinetix_catalog_dev"),
-        'USER': os.environ.get("DB_USER", "postgres"),
+        'NAME': _require_env("DB_NAME"),
+        'USER': _require_env("DB_USER"),
         'PASSWORD': _require_env("DB_PASSWORD"),
-        'HOST': os.environ.get("DB_HOST", "localhost"),
-        'PORT': os.environ.get("DB_PORT", "5432"),
-        'CONN_MAX_AGE': int(os.environ.get("DB_CONN_MAX_AGE", "60")),
+        'HOST': _require_env("DB_HOST"),
+        'PORT': _require_env("DB_PORT"),
+        'CONN_MAX_AGE': _require_whole_number("DB_CONN_MAX_AGE"),
         'CONN_HEALTH_CHECKS': True,
     }
 }
@@ -94,6 +113,7 @@ REST_FRAMEWORK = {
         'rest_framework.renderers.JSONRenderer',
     ],
     'EXCEPTION_HANDLER': 'core.api.exception_handler.api_exception_handler',
+    'URL_FORMAT_OVERRIDE': None,
     'UNAUTHENTICATED_USER': None,
     'UNAUTHENTICATED_TOKEN': None,
 }
@@ -115,9 +135,6 @@ USE_TZ = True
 STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-WAREHOUSE_GRPC_HOST = os.environ.get("WAREHOUSE_GRPC_HOST", "localhost")
-WAREHOUSE_GRPC_PORT = int(os.environ.get("WAREHOUSE_GRPC_PORT", "50051"))
 
 LOGGING = {
     'version': 1,
@@ -142,6 +159,6 @@ LOGGING = {
     },
     'root': {
         'handlers': ['console'],
-        'level': os.environ.get("LOG_LEVEL", "INFO").upper(),
+        'level': _require_env("LOG_LEVEL").upper(),
     },
 }

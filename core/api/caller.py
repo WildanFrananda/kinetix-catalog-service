@@ -12,6 +12,14 @@ def signed_in_caller(request: Request) -> Principal:
     return user
 
 
+def selling_caller(request: Request) -> Principal:
+    principal = signed_in_caller(request)
+    if principal.role != "seller":
+        raise PermissionDenied("only a seller account has products of its own", code="seller_required")
+
+    return principal
+
+
 def category_manager(request: Request) -> Principal:
     principal = signed_in_caller(request)
     if principal.role != "admin":
