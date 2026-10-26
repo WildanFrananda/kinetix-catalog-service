@@ -1,36 +1,34 @@
 import logging
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, TypeVar
 
 import grpc
-from google.protobuf.message import Message
 
 from core.infrastructure.metrics.contract_metrics import GRPC_CLIENT_CALLS_TOTAL
 
 if TYPE_CHECKING:
     from grpc import _CallFuture
 
-    _UnaryUnaryInterceptor = grpc.UnaryUnaryClientInterceptor[Message, Message]
-else:
-    _UnaryUnaryInterceptor = grpc.UnaryUnaryClientInterceptor
-
 logger = logging.getLogger(__name__)
 
+RequestT = TypeVar("RequestT")
+ResponseT = TypeVar("ResponseT")
 
-class GrpcClientMetricsInterceptor(_UnaryUnaryInterceptor):
+
+class GrpcClientMetricsInterceptor(grpc.UnaryUnaryClientInterceptor):
     def __init__(self, peer: str) -> None:
         self._peer = peer
 
     def intercept_unary_unary(
         self,
-        continuation: Callable[[grpc.ClientCallDetails, Message], "_CallFuture[Message]"],
+        continuation: Callable[[grpc.ClientCallDetails, RequestT], "_CallFuture[ResponseT]"],
         client_call_details: grpc.ClientCallDetails,
-        request: Message,
-    ) -> "_CallFuture[Message]":
+        request: RequestT,
+    ) -> "_CallFuture[ResponseT]":
         call = continuation(client_call_details, request)
         self._record(client_call_details.method, call)
         return call
 
-    def _record(self, method: str, call: "_CallFuture[Message]") -> None:
+    def _record(self, method: str, call: grpc.Call) -> None:
         try:
             GRPC_CLIENT_CALLS_TOTAL.labels(
                 peer=self._peer, grpc_method=method, grpc_code=call.code().name
