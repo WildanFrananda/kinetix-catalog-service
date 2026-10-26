@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import TYPE_CHECKING, Callable, FrozenSet, Iterator, Optional, Sequence, Tuple
+from typing import Callable, FrozenSet, Iterator, Optional, Sequence, Tuple, TypeVar
 
 import grpc
 
@@ -17,8 +17,11 @@ _OPEN_METHODS: Tuple[str, ...] = (
     "/grpc.reflection.",
 )
 
-Behavior = Callable[[object, grpc.ServicerContext], object]
-StreamBehavior = Callable[[object, grpc.ServicerContext], Iterator[object]]
+RequestT = TypeVar("RequestT")
+ResponseT = TypeVar("ResponseT")
+
+Behavior = Callable[[RequestT, grpc.ServicerContext], ResponseT]
+StreamBehavior = Callable[[RequestT, grpc.ServicerContext], Iterator[ResponseT]]
 Handler = grpc.RpcMethodHandler
 
 
@@ -55,23 +58,17 @@ def service_of(
     return None
 
 
-if TYPE_CHECKING:
-    _Intercepted = grpc.ServerInterceptor[object, object]
-else:
-    _Intercepted = grpc.ServerInterceptor
-
-
-class PeerAuthorizationInterceptor(_Intercepted):
+class PeerAuthorizationInterceptor(grpc.ServerInterceptor):
     def __init__(self, allowed: FrozenSet[str]) -> None:
         self._allowed = allowed
 
     def intercept_service(
         self,
         continuation: Callable[
-            [grpc.HandlerCallDetails], Optional[Handler[object, object]]
+            [grpc.HandlerCallDetails], Optional[Handler[RequestT, ResponseT]]
         ],
         handler_call_details: grpc.HandlerCallDetails,
-    ) -> Optional[Handler[object, object]]:
+    ) -> Optional[Handler[RequestT, ResponseT]]:
         method: str = getattr(handler_call_details, "method", "") or ""
 
         if method.startswith(_OPEN_METHODS):
@@ -102,16 +99,20 @@ class PeerAuthorizationInterceptor(_Intercepted):
         auth = context.auth_context()
         return service_of(auth.get(_SAN_KEY, []))
 
-    def _guarded_stream(self, behavior: StreamBehavior, method: str) -> StreamBehavior:
-        def guard(request: object, context: grpc.ServicerContext) -> Iterator[object]:
+    def _guarded_stream(
+        self, behavior: StreamBehavior[RequestT, ResponseT], method: str
+    ) -> StreamBehavior[RequestT, ResponseT]:
+        def guard(request: RequestT, context: grpc.ServicerContext) -> Iterator[ResponseT]:
             self._refuse_unless_allowed(context, method)
 
             return behavior(request, context)
 
         return guard
 
-    def _guarded(self, behavior: Behavior, method: str) -> Behavior:
-        def guard(request: object, context: grpc.ServicerContext) -> object:
+    def _guarded(
+        self, behavior: Behavior[RequestT, ResponseT], method: str
+    ) -> Behavior[RequestT, ResponseT]:
+        def guard(request: RequestT, context: grpc.ServicerContext) -> ResponseT:
             self._refuse_unless_allowed(context, method)
 
             return behavior(request, context)
