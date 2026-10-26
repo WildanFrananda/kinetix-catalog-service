@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Callable, Iterator, NoReturn, Optional, Tuple
+from typing import Callable, Iterator, NoReturn, Optional, Tuple, TypeVar
 
 import grpc
 
@@ -20,22 +20,20 @@ _OPEN_METHODS: Tuple[str, ...] = (
     "/grpc.reflection.",
 )
 
-Behavior = Callable[[object, grpc.ServicerContext], object]
-StreamBehavior = Callable[[object, grpc.ServicerContext], Iterator[object]]
+RequestT = TypeVar("RequestT")
+ResponseT = TypeVar("ResponseT")
+
+Behavior = Callable[[RequestT, grpc.ServicerContext], ResponseT]
+StreamBehavior = Callable[[RequestT, grpc.ServicerContext], Iterator[ResponseT]]
 Handler = grpc.RpcMethodHandler
 
-if TYPE_CHECKING:
-    _Intercepted = grpc.ServerInterceptor[object, object]
-else:
-    _Intercepted = grpc.ServerInterceptor
 
-
-class ErrorStatusInterceptor(_Intercepted):
+class ErrorStatusInterceptor(grpc.ServerInterceptor):
     def intercept_service(
         self,
-        continuation: Callable[[grpc.HandlerCallDetails], Optional[Handler[object, object]]],
+        continuation: Callable[[grpc.HandlerCallDetails], Optional[Handler[RequestT, ResponseT]]],
         handler_call_details: grpc.HandlerCallDetails,
-    ) -> Optional[Handler[object, object]]:
+    ) -> Optional[Handler[RequestT, ResponseT]]:
         method: str = getattr(handler_call_details, "method", "") or ""
 
         if method.startswith(_OPEN_METHODS):
@@ -62,8 +60,10 @@ class ErrorStatusInterceptor(_Intercepted):
 
         return handler
 
-    def _answered(self, behavior: Behavior, method: str) -> Behavior:
-        def call(request: object, context: grpc.ServicerContext) -> object:
+    def _answered(
+        self, behavior: Behavior[RequestT, ResponseT], method: str
+    ) -> Behavior[RequestT, ResponseT]:
+        def call(request: RequestT, context: grpc.ServicerContext) -> ResponseT:
             try:
                 return behavior(request, context)
             except Exception as error:
@@ -71,8 +71,10 @@ class ErrorStatusInterceptor(_Intercepted):
 
         return call
 
-    def _answered_stream(self, behavior: StreamBehavior, method: str) -> StreamBehavior:
-        def call(request: object, context: grpc.ServicerContext) -> Iterator[object]:
+    def _answered_stream(
+        self, behavior: StreamBehavior[RequestT, ResponseT], method: str
+    ) -> StreamBehavior[RequestT, ResponseT]:
+        def call(request: RequestT, context: grpc.ServicerContext) -> Iterator[ResponseT]:
             try:
                 yield from behavior(request, context)
             except Exception as error:

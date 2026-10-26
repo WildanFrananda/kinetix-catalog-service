@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable, Iterator, Optional, Tuple
+from typing import Callable, Iterator, Optional, Tuple, TypeVar
 
 import grpc
 from django.db import close_old_connections
 
-Behavior = Callable[[object, grpc.ServicerContext], object]
-StreamBehavior = Callable[[object, grpc.ServicerContext], Iterator[object]]
+RequestT = TypeVar("RequestT")
+ResponseT = TypeVar("ResponseT")
+
+Behavior = Callable[[RequestT, grpc.ServicerContext], ResponseT]
+StreamBehavior = Callable[[RequestT, grpc.ServicerContext], Iterator[ResponseT]]
 Handler = grpc.RpcMethodHandler
 
 _OPEN_METHODS: Tuple[str, ...] = (
@@ -14,18 +17,13 @@ _OPEN_METHODS: Tuple[str, ...] = (
     "/grpc.reflection.",
 )
 
-if TYPE_CHECKING:
-    _Intercepted = grpc.ServerInterceptor[object, object]
-else:
-    _Intercepted = grpc.ServerInterceptor
 
-
-class DatabaseConnectionInterceptor(_Intercepted):
+class DatabaseConnectionInterceptor(grpc.ServerInterceptor):
     def intercept_service(
         self,
-        continuation: Callable[[grpc.HandlerCallDetails], Optional[Handler[object, object]]],
+        continuation: Callable[[grpc.HandlerCallDetails], Optional[Handler[RequestT, ResponseT]]],
         handler_call_details: grpc.HandlerCallDetails,
-    ) -> Optional[Handler[object, object]]:
+    ) -> Optional[Handler[RequestT, ResponseT]]:
         method: str = getattr(handler_call_details, "method", "") or ""
 
         if method.startswith(_OPEN_METHODS):
@@ -52,8 +50,10 @@ class DatabaseConnectionInterceptor(_Intercepted):
 
         return handler
 
-    def _around(self, behavior: Behavior) -> Behavior:
-        def call(request: object, context: grpc.ServicerContext) -> object:
+    def _around(
+        self, behavior: Behavior[RequestT, ResponseT]
+    ) -> Behavior[RequestT, ResponseT]:
+        def call(request: RequestT, context: grpc.ServicerContext) -> ResponseT:
             close_old_connections()
             try:
                 return behavior(request, context)
@@ -62,8 +62,10 @@ class DatabaseConnectionInterceptor(_Intercepted):
 
         return call
 
-    def _around_stream(self, behavior: StreamBehavior) -> StreamBehavior:
-        def call(request: object, context: grpc.ServicerContext) -> Iterator[object]:
+    def _around_stream(
+        self, behavior: StreamBehavior[RequestT, ResponseT]
+    ) -> StreamBehavior[RequestT, ResponseT]:
+        def call(request: RequestT, context: grpc.ServicerContext) -> Iterator[ResponseT]:
             close_old_connections()
             try:
                 yield from behavior(request, context)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable, Iterator, Optional
+from typing import Callable, Iterator, Optional, TypeVar
 
 import grpc
 
@@ -11,24 +11,20 @@ from core.infrastructure.observability import (
     set_request_id,
 )
 
-Behavior = Callable[[object, grpc.ServicerContext], object]
-StreamBehavior = Callable[[object, grpc.ServicerContext], Iterator[object]]
+RequestT = TypeVar("RequestT")
+ResponseT = TypeVar("ResponseT")
+
+Behavior = Callable[[RequestT, grpc.ServicerContext], ResponseT]
+StreamBehavior = Callable[[RequestT, grpc.ServicerContext], Iterator[ResponseT]]
 Handler = grpc.RpcMethodHandler
 
-_END = object()
 
-if TYPE_CHECKING:
-    _Intercepted = grpc.ServerInterceptor[object, object]
-else:
-    _Intercepted = grpc.ServerInterceptor
-
-
-class RequestIdInterceptor(_Intercepted):
+class RequestIdInterceptor(grpc.ServerInterceptor):
     def intercept_service(
         self,
-        continuation: Callable[[grpc.HandlerCallDetails], Optional[Handler[object, object]]],
+        continuation: Callable[[grpc.HandlerCallDetails], Optional[Handler[RequestT, ResponseT]]],
         handler_call_details: grpc.HandlerCallDetails,
-    ) -> Optional[Handler[object, object]]:
+    ) -> Optional[Handler[RequestT, ResponseT]]:
         handler = continuation(handler_call_details)
 
         if handler is None:
@@ -52,8 +48,10 @@ class RequestIdInterceptor(_Intercepted):
 
         return handler
 
-    def _adopted(self, behavior: Behavior, request_id: Optional[str]) -> Behavior:
-        def call(request: object, context: grpc.ServicerContext) -> object:
+    def _adopted(
+        self, behavior: Behavior[RequestT, ResponseT], request_id: Optional[str]
+    ) -> Behavior[RequestT, ResponseT]:
+        def call(request: RequestT, context: grpc.ServicerContext) -> ResponseT:
             token = set_request_id(request_id)
             try:
                 return behavior(request, context)
@@ -62,8 +60,10 @@ class RequestIdInterceptor(_Intercepted):
 
         return call
 
-    def _adopted_stream(self, behavior: StreamBehavior, request_id: Optional[str]) -> StreamBehavior:
-        def call(request: object, context: grpc.ServicerContext) -> Iterator[object]:
+    def _adopted_stream(
+        self, behavior: StreamBehavior[RequestT, ResponseT], request_id: Optional[str]
+    ) -> StreamBehavior[RequestT, ResponseT]:
+        def call(request: RequestT, context: grpc.ServicerContext) -> Iterator[ResponseT]:
             token = set_request_id(request_id)
             try:
                 responses = iter(behavior(request, context))
@@ -73,12 +73,11 @@ class RequestIdInterceptor(_Intercepted):
             while True:
                 token = set_request_id(request_id)
                 try:
-                    response = next(responses, _END)
+                    response = next(responses)
+                except StopIteration:
+                    return
                 finally:
                     reset_request_id(token)
-
-                if response is _END:
-                    return
 
                 yield response
 
