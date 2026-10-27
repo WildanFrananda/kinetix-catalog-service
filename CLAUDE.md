@@ -101,6 +101,14 @@ limit holds for JSON too. Both reached the handler as unknown exceptions and ans
 are `413 BODY_TOO_LARGE` and `400 TOO_MANY_FIELDS` now. `URL_FORMAT_OVERRIDE` is off: `?format=xml` used to be a
 renderer choice that answered 404 on every route, and is now an ignored query parameter.
 
+Catalog takes no files, so since 2026-10-27 `DATA_UPLOAD_MAX_NUMBER_FILES` is 0: Django raises `TooManyFilesSent` at a
+`multipart/form-data` body's first file part (a part whose disposition names a filename), before any upload handler
+opens a file and before the part's bytes are read, and that is `400 FILES_NOT_ACCEPTED`. Until then file parts counted
+against no limit (`DATA_UPLOAD_MAX_MEMORY_SIZE` counts text fields only, and Kong sets none on catalog's routes), so
+each was read in full, held in memory or spooled to a temporary file, and ignored, and more than 100 answered 500. A
+form's text fields are read as before. The tests prove "never opened, never read" with `RecordingUploadHandler` as the
+only upload handler and the share of the test client's payload left unread.
+
 ## A database that cannot be reached is 503
 
 The house failure mode: "the database did not answer" is not a server fault of the request. A Django

@@ -3,7 +3,7 @@ from http import HTTPStatus
 from typing import Dict, Optional
 
 from django.conf import settings
-from django.core.exceptions import RequestDataTooBig, TooManyFieldsSent
+from django.core.exceptions import RequestDataTooBig, TooManyFieldsSent, TooManyFilesSent
 from rest_framework import status
 from rest_framework.exceptions import APIException, ErrorDetail
 from rest_framework.response import Response
@@ -39,6 +39,9 @@ _BODY_TOO_LARGE_MESSAGE = (
 _TOO_MANY_FIELDS_MESSAGE = (
     f"this request carries more than {settings.DATA_UPLOAD_MAX_NUMBER_FIELDS} query or form "
     "fields, so it was not read"
+)
+_FILES_NOT_ACCEPTED_MESSAGE = (
+    "a multipart/form-data body may carry text fields only, and this one carries a file, so it was not read"
 )
 
 
@@ -105,6 +108,12 @@ def _unreadable_request(exc: Exception) -> Optional[Response]:
 
     if isinstance(exc, TooManyFieldsSent):
         return Response(error_body("TOO_MANY_FIELDS", _TOO_MANY_FIELDS_MESSAGE), status=status.HTTP_400_BAD_REQUEST)
+
+    if isinstance(exc, TooManyFilesSent):
+        return Response(
+            error_body("FILES_NOT_ACCEPTED", _FILES_NOT_ACCEPTED_MESSAGE),
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     return None
 
