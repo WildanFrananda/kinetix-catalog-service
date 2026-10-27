@@ -3,7 +3,7 @@ from typing import Dict
 import psycopg
 import pytest
 from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
-from django.core.exceptions import RequestDataTooBig, TooManyFieldsSent
+from django.core.exceptions import RequestDataTooBig, TooManyFieldsSent, TooManyFilesSent
 from django.db import IntegrityError, InterfaceError, OperationalError
 from django.http import Http404
 from psycopg import errors as pg_errors
@@ -65,6 +65,14 @@ class TestBodiesAndQueriesTheServiceWillNotRead:
 
         assert body["status"] == 400
         assert body["error"] == "TOO_MANY_FIELDS"
+        assert "settings" not in str(body["message"])
+
+    def test_a_file_part_is_a_400_that_says_files_are_not_accepted(self) -> None:
+        body = _answer(TooManyFilesSent("The number of files exceeded settings.DATA_UPLOAD_MAX_NUMBER_FILES."))
+
+        assert body["status"] == 400
+        assert body["error"] == "FILES_NOT_ACCEPTED"
+        assert "text fields only" in str(body["message"])
         assert "settings" not in str(body["message"])
 
 

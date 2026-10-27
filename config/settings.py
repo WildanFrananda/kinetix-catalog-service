@@ -120,6 +120,8 @@ REST_FRAMEWORK = {
 
 APPEND_SLASH = False
 
+DATA_UPLOAD_MAX_NUMBER_FILES = 0
+
 # Internationalization
 
 LANGUAGE_CODE = 'en-us'
